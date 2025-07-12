@@ -33,12 +33,37 @@ pub fn handler(
         return Err(SolanaMafiaError::InsufficientDeposit.into());
     }
 
+    // Validate referrer (cannot refer yourself)
+    if let Some(ref_key) = referrer {
+        if ref_key == ctx.accounts.owner.key() {
+            return Err(SolanaMafiaError::CannotReferYourself.into());
+        }
+    }
+
     // Initialize player if this is a new account
     let player = &mut ctx.accounts.player;
+    let is_new_player = player.owner == Pubkey::default();
+    let mut total_fees = 0u64;
     
-    // Check if player account is newly created (default values)
-    if player.owner == Pubkey::default() {
-        // This is a new player account, initialize it
+    if is_new_player {
+        // New player - require entry fee ($10)
+        let entry_fee = game_config.entry_fee;
+        
+        // Transfer entry fee to treasury
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.treasury.to_account_info(),
+                },
+            ),
+            entry_fee,
+        )?;
+        
+        total_fees += entry_fee;
+
+        // Initialize player
         player.owner = ctx.accounts.owner.key();
         player.referrer = referrer;
         player.has_paid_entry = true;
@@ -52,8 +77,9 @@ pub fn handler(
         
         // Update game stats for new player
         game_state.add_player();
+        game_state.add_treasury_collection(entry_fee);
         
-        msg!("New player registered!");
+        msg!("New player registered! Entry fee: {} lamports", entry_fee);
     }
 
     // Validate player can create more businesses
@@ -63,6 +89,7 @@ pub fn handler(
 
     // Calculate treasury fee (20% of deposit goes to team)
     let treasury_fee = (deposit_amount * game_config.treasury_fee_percent as u64) / 100;
+    total_fees += treasury_fee;
     
     // Transfer treasury fee to treasury wallet
     system_program::transfer(
@@ -75,6 +102,23 @@ pub fn handler(
         ),
         treasury_fee,
     )?;
+
+    // Process referral bonus (5% of deposit to level 1 referrer)
+    let mut referral_paid = 0u64;
+    if let Some(referrer_key) = player.referrer {
+        if let Some(ref mut referrer_account) = ctx.accounts.referrer_player {
+            let bonus = (deposit_amount * REFERRAL_RATES[0] as u64) / 100; // 5%
+            
+            // Начисляем бонус рефереру на баланс
+            referrer_account.referral_earnings += bonus;
+            referral_paid = bonus;
+            
+            // Обновляем статистику
+            game_state.add_referral_payment(bonus);
+            
+            msg!("Referral bonus: {} lamports paid to {}", bonus, referrer_key);
+        }
+    }
 
     // Create business
     let business = Business::new(
@@ -97,8 +141,10 @@ pub fn handler(
     msg!("Type: {:?}", business_enum);
     msg!("Investment: {} lamports", deposit_amount);
     msg!("Daily rate: {} basis points", daily_rate);
+    msg!("Entry fee: {} lamports", if is_new_player { game_config.entry_fee } else { 0 });
     msg!("Treasury fee: {} lamports", treasury_fee);
-    msg!("Game pool: {} lamports", deposit_amount - treasury_fee);
+    msg!("Referral bonus: {} lamports", referral_paid);
+    msg!("Game pool: {} lamports", deposit_amount - treasury_fee - referral_paid);
 
     Ok(())
 }
@@ -142,6 +188,15 @@ pub struct CreateBusiness<'info> {
         address = game_state.treasury_wallet
     )]
     pub treasury: AccountInfo<'info>,
+
+    /// Referrer player account (optional - only if referrer is provided)
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, referrer.unwrap_or_default().as_ref()],
+        bump,
+        // Только проверяем если referrer передан
+    )]
+    pub referrer_player: Option<Account<'info, Player>>,
 
     /// System program
     pub system_program: Program<'info, System>,
