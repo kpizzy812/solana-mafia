@@ -3,10 +3,12 @@ use anchor_lang::prelude::*;
 // Import modules
 pub mod constants;
 pub mod error;
+pub mod state;
 
 // Re-export for convenience
 pub use constants::*;
 pub use error::*;
+pub use state::*;
 
 declare_id!("93zp2Qtgaiud9NTG1fYb4qqDddSi98AAx9Px7Gyv3CnM");
 
