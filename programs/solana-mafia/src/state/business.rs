@@ -68,6 +68,17 @@ pub struct Business {
 }
 
 impl Business {
+    /// Size of Business struct for serialization
+    pub const SIZE: usize = 
+        1 + // business_type enum (1 byte)
+        8 + // invested_amount
+        2 + // daily_rate
+        1 + // upgrade_level
+        8 + // total_earned
+        8 + // last_claim
+        8 + // created_at
+        1;  // is_active
+
     /// Create a new business
     pub fn new(
         business_type: BusinessType,

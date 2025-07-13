@@ -25,7 +25,8 @@ pub fn handler(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> 
     
     msg!("Solana Mafia initialized successfully!");
     msg!("Authority: {}", ctx.accounts.authority.key());
-    msg!("Treasury: {}", treasury_wallet);
+    msg!("Treasury Wallet: {}", treasury_wallet);
+    msg!("Treasury PDA: {}", ctx.accounts.treasury_pda.key());
     msg!("Total business types: {}", BUSINESS_TYPES_COUNT);
     
     Ok(())
@@ -56,6 +57,16 @@ pub struct Initialize<'info> {
         bump
     )]
     pub game_config: Account<'info, GameConfig>,
+    
+    /// Treasury PDA to hold game pool funds
+    #[account(
+        init,
+        payer = authority,
+        space = 0,
+        seeds = [TREASURY_SEED],
+        bump
+    )]
+    pub treasury_pda: SystemAccount<'info>,
     
     /// System program for account creation
     pub system_program: Program<'info, System>,

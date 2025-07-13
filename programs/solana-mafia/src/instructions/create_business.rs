@@ -43,41 +43,20 @@ pub fn handler(
     // Initialize player if this is a new account
     let player = &mut ctx.accounts.player;
     let is_new_player = player.owner == Pubkey::default();
-    let mut total_fees = 0u64;
+    let entry_fee = if is_new_player { game_config.entry_fee } else { 0 };
     
     if is_new_player {
-        // New player - require entry fee ($10)
-        let entry_fee = game_config.entry_fee;
-        
-        // Transfer entry fee to treasury
-        system_program::transfer(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.owner.to_account_info(),
-                    to: ctx.accounts.treasury.to_account_info(),
-                },
-            ),
-            entry_fee,
-        )?;
-        
-        total_fees += entry_fee;
-
         // Initialize player
-        player.owner = ctx.accounts.owner.key();
-        player.referrer = referrer;
+        **player = Player::new(
+            ctx.accounts.owner.key(),
+            referrer,
+            clock.unix_timestamp,
+            ctx.bumps.player,
+        );
         player.has_paid_entry = true;
-        player.total_invested = 0;
-        player.total_claimed = 0;
-        player.referral_earnings = 0;
-        player.businesses = Vec::new();
-        player.created_at = clock.unix_timestamp;
-        player.last_claim = clock.unix_timestamp;
-        player.bump = ctx.bumps.player;
         
         // Update game stats for new player
         game_state.add_player();
-        game_state.add_treasury_collection(entry_fee);
         
         msg!("New player registered! Entry fee: {} lamports", entry_fee);
     }
@@ -87,38 +66,41 @@ pub fn handler(
         return Err(SolanaMafiaError::MaxBusinessesReached.into());
     }
 
+    // Calculate total amount needed (entry fee + deposit)
+    let total_amount = entry_fee + deposit_amount;
+    
     // Calculate treasury fee (20% of deposit goes to team)
     let treasury_fee = (deposit_amount * game_config.treasury_fee_percent as u64) / 100;
-    total_fees += treasury_fee;
+    let total_treasury = entry_fee + treasury_fee;
     
-    // Transfer treasury fee to treasury wallet
+    // Transfer total treasury amount to treasury wallet (not PDA)
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
             system_program::Transfer {
                 from: ctx.accounts.owner.to_account_info(),
-                to: ctx.accounts.treasury.to_account_info(),
+                to: ctx.accounts.treasury_wallet.to_account_info(),
             },
         ),
-        treasury_fee,
+        total_treasury,
     )?;
 
-    // Process referral bonus (5% of deposit to level 1 referrer)
-    let mut referral_paid = 0u64;
-    if let Some(referrer_key) = player.referrer {
-        if let Some(ref mut referrer_account) = ctx.accounts.referrer_player {
-            let bonus = (deposit_amount * REFERRAL_RATES[0] as u64) / 100; // 5%
-            
-            // Начисляем бонус рефереру на баланс
-            referrer_account.referral_earnings += bonus;
-            referral_paid = bonus;
-            
-            // Обновляем статистику
-            game_state.add_referral_payment(bonus);
-            
-            msg!("Referral bonus: {} lamports paid to {}", bonus, referrer_key);
-        }
-    }
+    // Transfer game pool portion to treasury PDA
+    let game_pool_amount = deposit_amount - treasury_fee;
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.owner.to_account_info(),
+                to: ctx.accounts.treasury_pda.to_account_info(),
+            },
+        ),
+        game_pool_amount,
+    )?;
+
+    // Store referrer info for later referral bonus processing
+    // (Referral bonuses will be processed by a separate crank instruction)
+    let referrer_for_bonus = player.referrer;
 
     // Create business
     let business = Business::new(
@@ -134,17 +116,20 @@ pub fn handler(
 
     // Update game statistics
     game_state.add_investment(deposit_amount);
-    game_state.add_treasury_collection(treasury_fee);
+    game_state.add_treasury_collection(total_treasury);
     game_state.add_business();
 
     msg!("Business created successfully!");
     msg!("Type: {:?}", business_enum);
     msg!("Investment: {} lamports", deposit_amount);
     msg!("Daily rate: {} basis points", daily_rate);
-    msg!("Entry fee: {} lamports", if is_new_player { game_config.entry_fee } else { 0 });
+    msg!("Entry fee: {} lamports", entry_fee);
     msg!("Treasury fee: {} lamports", treasury_fee);
-    msg!("Referral bonus: {} lamports", referral_paid);
-    msg!("Game pool: {} lamports", deposit_amount - treasury_fee - referral_paid);
+    msg!("Game pool: {} lamports", deposit_amount - treasury_fee);
+    
+    if let Some(ref_key) = referrer_for_bonus {
+        msg!("Referrer set: {} (bonus will be processed)", ref_key);
+    }
 
     Ok(())
 }
@@ -181,22 +166,21 @@ pub struct CreateBusiness<'info> {
     )]
     pub game_state: Account<'info, GameState>,
 
-    /// Treasury wallet where fees go
+    /// Treasury wallet where team fees go
     /// CHECK: This is validated against game_state.treasury_wallet
     #[account(
         mut,
         address = game_state.treasury_wallet
     )]
-    pub treasury: AccountInfo<'info>,
+    pub treasury_wallet: AccountInfo<'info>,
 
-    /// Referrer player account (optional - only if referrer is provided)
+    /// Treasury PDA where game pool funds are stored
     #[account(
         mut,
-        seeds = [PLAYER_SEED, referrer.unwrap_or_default().as_ref()],
-        bump,
-        // Только проверяем если referrer передан
+        seeds = [TREASURY_SEED],
+        bump
     )]
-    pub referrer_player: Option<Account<'info, Player>>,
+    pub treasury_pda: SystemAccount<'info>,
 
     /// System program
     pub system_program: Program<'info, System>,

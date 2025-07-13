@@ -33,12 +33,21 @@ pub mod solana_mafia {
         instructions::create_business::handler(ctx, business_type, deposit_amount, referrer)
     }
 
-    /// Pay referral bonus to a referrer
-    pub fn pay_referral_bonus(
-        ctx: Context<PayReferralBonus>,
+    /// Claim all pending earnings (business + referral)
+    pub fn claim_earnings(ctx: Context<ClaimEarnings>) -> Result<()> {
+        instructions::claim_earnings::handler(ctx)
+    }
+
+    /// Process referral bonus for a player (crank instruction)
+    pub fn process_referral_bonus(
+        ctx: Context<ProcessReferralBonus>,
         deposit_amount: u64,
-        referral_level: u8,
     ) -> Result<()> {
-        instructions::pay_referral_bonus::handler(ctx, deposit_amount, referral_level)
+        instructions::process_referral_bonus::handler(ctx, deposit_amount)
+    }
+
+    /// Update player's pending earnings (crank instruction)
+    pub fn update_earnings(ctx: Context<UpdateEarnings>) -> Result<()> {
+        instructions::update_earnings::handler(ctx)
     }
 }
