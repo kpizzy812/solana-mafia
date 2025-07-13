@@ -50,4 +50,41 @@ pub mod solana_mafia {
     pub fn update_earnings(ctx: Context<UpdateEarnings>) -> Result<()> {
         instructions::update_earnings::handler(ctx)
     }
+
+    /// Upgrade a business (admin donation for higher yield)
+    pub fn upgrade_business(
+        ctx: Context<UpgradeBusiness>,
+        business_index: u8,
+    ) -> Result<()> {
+        instructions::upgrade_business::handler(ctx, business_index)
+    }
+
+    /// Sell a business with early exit fee
+    pub fn sell_business(
+        ctx: Context<SellBusiness>,
+        business_index: u8,
+    ) -> Result<()> {
+        instructions::sell_business::handler(ctx, business_index)
+    }
+
+    /// Set referrer for a player
+    pub fn set_referrer(
+        ctx: Context<SetReferrer>,
+        referrer_key: Pubkey,
+    ) -> Result<()> {
+        instructions::set_referrer::handler(ctx, referrer_key)
+    }
+
+    /// Toggle game pause (admin only)
+    pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {
+        instructions::admin::toggle_pause(ctx)
+    }
+
+    /// Update treasury fee percentage (admin only)
+    pub fn update_treasury_fee(
+        ctx: Context<UpdateTreasuryFee>,
+        new_fee: u8,
+    ) -> Result<()> {
+        instructions::admin::update_treasury_fee(ctx, new_fee)
+    }
 }
