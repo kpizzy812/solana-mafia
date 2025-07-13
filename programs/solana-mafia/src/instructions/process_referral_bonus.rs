@@ -2,60 +2,39 @@
 use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::state::*;
-use crate::error::*;
 
+/// Simple instruction to add referral earnings to a player's balance
+/// Called from backend when referral bonus should be credited
 pub fn handler(
-    ctx: Context<ProcessReferralBonus>,
-    deposit_amount: u64,
+    ctx: Context<AddReferralEarnings>,
+    amount: u64,
 ) -> Result<()> {
-    let player = &ctx.accounts.player;
+    let player = &mut ctx.accounts.player;
     let game_state = &mut ctx.accounts.game_state;
     
-    // Check if player has a referrer
-    if player.referrer.is_none() {
-        msg!("Player has no referrer, skipping bonus");
-        return Ok(());
-    }
-    
-    let referrer = &mut ctx.accounts.referrer;
-    
-    // Calculate Level 1 referral bonus (5% of deposit)
-    let bonus_amount = (deposit_amount * REFERRAL_RATES[0] as u64) / 100;
-    
-    // Add bonus to referrer's pending earnings
-    referrer.add_referral_bonus(bonus_amount);
+    // Add bonus to player's pending referral earnings
+    player.add_referral_bonus(amount);
     
     // Update game statistics
-    game_state.add_referral_payment(bonus_amount);
+    game_state.add_referral_payment(amount);
     
-    msg!("Referral bonus processed!");
-    msg!("Referrer: {}", referrer.owner);
-    msg!("Bonus amount: {} lamports", bonus_amount);
-    msg!("Level: 1 ({}%)", REFERRAL_RATES[0]);
-    
-    // TODO: Process Level 2 and Level 3 referrals
-    // This would require additional accounts for referrer's referrer, etc.
+    msg!("Referral bonus added!");
+    msg!("Player: {}", player.owner);
+    msg!("Bonus amount: {} lamports", amount);
+    msg!("Total pending referral: {} lamports", player.pending_referral_earnings);
     
     Ok(())
 }
 
 #[derive(Accounts)]
-#[instruction(deposit_amount: u64)]
-pub struct ProcessReferralBonus<'info> {
-    /// Player who made the deposit
+pub struct AddReferralEarnings<'info> {
+    /// Player receiving the referral bonus
     #[account(
+        mut,
         seeds = [PLAYER_SEED, player.owner.as_ref()],
         bump = player.bump
     )]
     pub player: Account<'info, Player>,
-    
-    /// Referrer receiving the bonus
-    #[account(
-        mut,
-        seeds = [PLAYER_SEED, player.referrer.unwrap().as_ref()],
-        bump = referrer.bump
-    )]
-    pub referrer: Account<'info, Player>,
     
     /// Game state for statistics
     #[account(

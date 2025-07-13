@@ -5,12 +5,14 @@ pub mod constants;
 pub mod error;
 pub mod state;
 pub mod instructions;
+pub mod utils;
 
 // Re-export for convenience
 pub use constants::*;
 pub use error::*;
 pub use state::*;
 pub use instructions::*;
+pub use utils::*;
 
 declare_id!("93zp2Qtgaiud9NTG1fYb4qqDddSi98AAx9Px7Gyv3CnM");
 
@@ -28,9 +30,8 @@ pub mod solana_mafia {
         ctx: Context<CreateBusiness>,
         business_type: u8,
         deposit_amount: u64,
-        referrer: Option<Pubkey>,
     ) -> Result<()> {
-        instructions::create_business::handler(ctx, business_type, deposit_amount, referrer)
+        instructions::create_business::handler(ctx, business_type, deposit_amount)
     }
 
     /// Claim all pending earnings (business + referral)
@@ -38,12 +39,12 @@ pub mod solana_mafia {
         instructions::claim_earnings::handler(ctx)
     }
 
-    /// Process referral bonus for a player (crank instruction)
-    pub fn process_referral_bonus(
-        ctx: Context<ProcessReferralBonus>,
-        deposit_amount: u64,
+    /// Add referral earnings to a player (backend call)
+    pub fn add_referral_earnings(
+        ctx: Context<AddReferralEarnings>,
+        amount: u64,
     ) -> Result<()> {
-        instructions::process_referral_bonus::handler(ctx, deposit_amount)
+        instructions::process_referral_bonus::handler(ctx, amount)
     }
 
     /// Update player's pending earnings (crank instruction)
@@ -65,14 +66,6 @@ pub mod solana_mafia {
         business_index: u8,
     ) -> Result<()> {
         instructions::sell_business::handler(ctx, business_index)
-    }
-
-    /// Set referrer for a player
-    pub fn set_referrer(
-        ctx: Context<SetReferrer>,
-        referrer_key: Pubkey,
-    ) -> Result<()> {
-        instructions::set_referrer::handler(ctx, referrer_key)
     }
 
     /// Toggle game pause (admin only)

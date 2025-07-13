@@ -135,7 +135,7 @@ pub fn handler(
 }
 
 #[derive(Accounts)]
-#[instruction(business_type: u8, deposit_amount: u64, referrer: Option<Pubkey>)]
+#[instruction(business_type: u8, deposit_amount: u64)]
 pub struct CreateBusiness<'info> {
     /// Player who is creating the business
     #[account(mut)]

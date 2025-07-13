@@ -109,10 +109,9 @@ describe("solana-mafia", () => {
       // Создаем бизнес типа 0 (CryptoKiosk) с депозитом 0.1 SOL
       const businessType = 0;
       const depositAmount = new anchor.BN(100_000_000); // 0.1 SOL
-      const referrer = null;
 
       const tx = await program.methods
-        .createBusiness(businessType, depositAmount, referrer)
+        .createBusiness(businessType, depositAmount)
         .accounts({
           owner: provider.wallet.publicKey,
           player: playerPda,
