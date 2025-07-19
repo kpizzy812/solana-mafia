@@ -53,4 +53,14 @@ pub enum SolanaMafiaError {
     
     #[msg("Business still has active earnings")]
     BusinessHasActiveEarnings,
+    
+    // 🔒 RATE LIMITING ERRORS
+    #[msg("Too early to create another business")]
+    TooEarlyToCreateBusiness,
+    
+    #[msg("Too early to claim earnings")]
+    TooEarlyToClaim,
+    
+    #[msg("Too early to update earnings")]
+    TooEarlyToUpdate,
 }
