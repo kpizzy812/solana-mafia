@@ -1,15 +1,13 @@
-// state/business.rs
 use anchor_lang::prelude::*;
 
-/// Types of businesses available in the game
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
 pub enum BusinessType {
-    CryptoKiosk,    // 0.1 SOL - 0.8%/day
-    MemeCasino,     // 0.5 SOL - 0.9%/day  
-    NFTLaundry,     // 2 SOL - 1.0%/day
-    MiningFarm,     // 5 SOL - 1.1%/day
-    DeFiEmpire,     // 20 SOL - 1.3%/day
-    SolanaCartel,   // 100 SOL - 1.5%/day
+    CryptoKiosk = 0,
+    MemeCasino = 1,
+    NFTLaundry = 2,
+    MiningFarm = 3,
+    DeFiEmpire = 4,
+    SolanaCartel = 5,
 }
 
 impl BusinessType {
@@ -39,31 +37,15 @@ impl BusinessType {
     }
 }
 
-/// Individual business owned by a player
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
 pub struct Business {
-    /// Type of business
     pub business_type: BusinessType,
-    
-    /// Amount invested in this business (in lamports)
     pub invested_amount: u64,
-    
-    /// Current daily rate in basis points (includes upgrades)
     pub daily_rate: u16,
-    
-    /// Current upgrade level (0-5)
     pub upgrade_level: u8,
-    
-    /// Total amount earned from this business
     pub total_earned: u64,
-    
-    /// Timestamp of last earnings claim
     pub last_claim: i64,
-    
-    /// Timestamp when business was created
     pub created_at: i64,
-    
-    /// Whether business is active
     pub is_active: bool,
 }
 
@@ -101,5 +83,24 @@ impl Business {
     /// Calculate days since creation
     pub fn days_since_created(&self, current_time: i64) -> u64 {
         ((current_time - self.created_at) / 86_400) as u64
+    }
+
+    /// Calculate current daily earnings with upgrades
+    pub fn calculate_daily_earnings(&self) -> u64 {
+        let base_earnings = (self.invested_amount as u128 * self.daily_rate as u128) / 10_000;
+        base_earnings as u64
+    }
+
+    /// Calculate pending earnings since last claim
+    pub fn calculate_pending_earnings(&self, current_time: i64) -> u64 {
+        if !self.is_active {
+            return 0;
+        }
+
+        let seconds_since_claim = (current_time - self.last_claim) as u64;
+        let daily_earnings = self.calculate_daily_earnings();
+        
+        // Calculate earnings per second and multiply by elapsed time
+        (daily_earnings * seconds_since_claim) / 86_400
     }
 }

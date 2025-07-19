@@ -1,4 +1,3 @@
-// utils/validation.rs
 use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::error::*;
@@ -27,12 +26,4 @@ pub fn validate_upgrade_level(level: u8) -> Result<()> {
     Ok(())
 }
 
-/// Validate referrer (cannot be the same as player)
-pub fn validate_referrer(player: Pubkey, referrer: Option<Pubkey>) -> Result<()> {
-    if let Some(ref_key) = referrer {
-        if ref_key == player {
-            return Err(SolanaMafiaError::CannotReferYourself.into());
-        }
-    }
-    Ok(())
-}
+// Убрали validate_referrer - больше не нужна

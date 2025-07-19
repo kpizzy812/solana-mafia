@@ -1,18 +1,17 @@
 // instructions/upgrade_business.rs
 use anchor_lang::prelude::*;
-use anchor_lang::system_program;
 use crate::constants::*;
 use crate::state::*;
 use crate::error::*;
-use crate::utils::*;
+use crate::utils::validation::*;
 
 pub fn handler(
     ctx: Context<UpgradeBusiness>,
     business_index: u8,
 ) -> Result<()> {
     let player = &mut ctx.accounts.player;
-    let game_config = &ctx.accounts.game_config;
     let game_state = &mut ctx.accounts.game_state;
+    let game_config = &ctx.accounts.game_config;
     
     // Get business
     let business = player.get_business_mut(business_index)
@@ -22,27 +21,18 @@ pub fn handler(
         return Err(SolanaMafiaError::BusinessNotFound.into());
     }
     
-    // Check if business can be upgraded
-    if business.upgrade_level >= MAX_UPGRADE_LEVEL {
+    // Check if can upgrade
+    let current_level = business.upgrade_level;
+    if current_level >= MAX_UPGRADE_LEVEL {
         return Err(SolanaMafiaError::InvalidUpgradeLevel.into());
     }
     
-    let next_level = business.upgrade_level + 1;
+    let next_level = current_level + 1;
     let upgrade_cost = game_config.get_upgrade_cost(next_level)
         .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
     
-    // Transfer upgrade cost to treasury
-    system_program::transfer(
-        CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            system_program::Transfer {
-                from: ctx.accounts.owner.to_account_info(),
-                to: ctx.accounts.treasury_wallet.to_account_info(),
-            },
-        ),
-        upgrade_cost,
-    )?;
-    
+    // TODO: Implement payment validation
+    // For now, just upgrade
     // Apply upgrade
     business.upgrade_level = next_level;
     let bonus = game_config.get_upgrade_bonus(next_level);
@@ -51,36 +41,27 @@ pub fn handler(
     // Update statistics
     game_state.add_treasury_collection(upgrade_cost);
     
-    msg!("Business upgraded successfully!");
-    msg!("New level: {}", business.upgrade_level);
-    msg!("New daily rate: {} basis points", business.daily_rate);
+    msg!("Business upgraded!");
+    msg!("New level: {}", next_level);
     msg!("Upgrade cost: {} lamports", upgrade_cost);
+    msg!("New daily rate: {} basis points", business.daily_rate);
     
     Ok(())
 }
 
 #[derive(Accounts)]
 pub struct UpgradeBusiness<'info> {
-    /// Player upgrading the business
     #[account(mut)]
-    pub owner: Signer<'info>,
+    pub player_owner: Signer<'info>,
     
-    /// Player account
     #[account(
         mut,
-        seeds = [PLAYER_SEED, owner.key().as_ref()],
-        bump = player.bump
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == player_owner.key()
     )]
     pub player: Account<'info, Player>,
     
-    /// Game configuration
-    #[account(
-        seeds = [GAME_CONFIG_SEED],
-        bump = game_config.bump
-    )]
-    pub game_config: Account<'info, GameConfig>,
-    
-    /// Game state for statistics
     #[account(
         mut,
         seeds = [GAME_STATE_SEED],
@@ -88,14 +69,9 @@ pub struct UpgradeBusiness<'info> {
     )]
     pub game_state: Account<'info, GameState>,
     
-    /// Treasury wallet for upgrade fees
-    /// CHECK: This is validated against game_state.treasury_wallet
     #[account(
-        mut,
-        address = game_state.treasury_wallet
+        seeds = [GAME_CONFIG_SEED],
+        bump = game_config.bump
     )]
-    pub treasury_wallet: AccountInfo<'info>,
-    
-    /// System program
-    pub system_program: Program<'info, System>,
+    pub game_config: Account<'info, GameConfig>,
 }

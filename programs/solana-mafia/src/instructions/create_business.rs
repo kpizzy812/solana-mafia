@@ -9,7 +9,6 @@ pub fn handler(
     ctx: Context<CreateBusiness>,
     business_type: u8,
     deposit_amount: u64,
-    referrer: Option<Pubkey>,
 ) -> Result<()> {
     let clock = Clock::get()?;
     let game_config = &ctx.accounts.game_config;
@@ -33,47 +32,31 @@ pub fn handler(
         return Err(SolanaMafiaError::InsufficientDeposit.into());
     }
 
-    // Validate referrer (cannot refer yourself)
-    if let Some(ref_key) = referrer {
-        if ref_key == ctx.accounts.owner.key() {
-            return Err(SolanaMafiaError::CannotReferYourself.into());
-        }
-    }
-
-    // Initialize player if this is a new account
+    // Initialize player
     let player = &mut ctx.accounts.player;
-    let is_new_player = player.owner == Pubkey::default();
-    let entry_fee = if is_new_player { game_config.entry_fee } else { 0 };
+    let entry_fee = game_config.entry_fee;
     
-    if is_new_player {
-        // Initialize player
-        **player = Player::new(
-            ctx.accounts.owner.key(),
-            referrer,
-            clock.unix_timestamp,
-            ctx.bumps.player,
-        );
-        player.has_paid_entry = true;
-        
-        // Update game stats for new player
-        game_state.add_player();
-        
-        msg!("New player registered! Entry fee: {} lamports", entry_fee);
-    }
+    **player = Player::new(
+        ctx.accounts.owner.key(),
+        None,
+        clock.unix_timestamp,
+        ctx.bumps.player,
+    );
+    player.has_paid_entry = true;
+    
+    // Update game stats for new player
+    game_state.add_player();
 
     // Validate player can create more businesses
     if !player.can_create_business() {
         return Err(SolanaMafiaError::MaxBusinessesReached.into());
     }
 
-    // Calculate total amount needed (entry fee + deposit)
-    let total_amount = entry_fee + deposit_amount;
-    
     // Calculate treasury fee (20% of deposit goes to team)
     let treasury_fee = (deposit_amount * game_config.treasury_fee_percent as u64) / 100;
     let total_treasury = entry_fee + treasury_fee;
     
-    // Transfer total treasury amount to treasury wallet (not PDA)
+    // Transfer total treasury amount to treasury wallet
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -98,10 +81,6 @@ pub fn handler(
         game_pool_amount,
     )?;
 
-    // Store referrer info for later referral bonus processing
-    // (Referral bonuses will be processed by a separate crank instruction)
-    let referrer_for_bonus = player.referrer;
-
     // Create business
     let business = Business::new(
         business_enum.clone(),
@@ -125,11 +104,7 @@ pub fn handler(
     msg!("Daily rate: {} basis points", daily_rate);
     msg!("Entry fee: {} lamports", entry_fee);
     msg!("Treasury fee: {} lamports", treasury_fee);
-    msg!("Game pool: {} lamports", deposit_amount - treasury_fee);
-    
-    if let Some(ref_key) = referrer_for_bonus {
-        msg!("Referrer set: {} (bonus will be processed)", ref_key);
-    }
+    msg!("Game pool: {} lamports", game_pool_amount);
 
     Ok(())
 }
@@ -141,11 +116,11 @@ pub struct CreateBusiness<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    /// Player account (created if doesn't exist)
+    /// Player account (created new each time)
     #[account(
-        init_if_needed,
+        init,
         payer = owner,
-        space = Player::MAX_SIZE,
+        space = Player::SIZE,
         seeds = [PLAYER_SEED, owner.key().as_ref()],
         bump
     )]

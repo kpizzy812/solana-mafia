@@ -1,10 +1,8 @@
-// instructions/sell_business.rs
 use anchor_lang::prelude::*;
-use anchor_lang::system_program;
 use crate::constants::*;
 use crate::state::*;
 use crate::error::*;
-use crate::utils::*;
+use crate::utils::calculations::*;
 
 pub fn handler(
     ctx: Context<SellBusiness>,
@@ -49,19 +47,17 @@ pub fn handler(
 
 #[derive(Accounts)]
 pub struct SellBusiness<'info> {
-    /// Player selling the business
     #[account(mut)]
-    pub owner: Signer<'info>,
+    pub player_owner: Signer<'info>,
     
-    /// Player account
     #[account(
         mut,
-        seeds = [PLAYER_SEED, owner.key().as_ref()],
-        bump = player.bump
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == player_owner.key()
     )]
     pub player: Account<'info, Player>,
     
-    /// Game state for statistics
     #[account(
         mut,
         seeds = [GAME_STATE_SEED],
@@ -69,6 +65,10 @@ pub struct SellBusiness<'info> {
     )]
     pub game_state: Account<'info, GameState>,
     
-    /// System program
-    pub system_program: Program<'info, System>,
+    #[account(
+        mut,
+        seeds = [TREASURY_SEED],
+        bump = treasury_pda.bump
+    )]
+    pub treasury_pda: Account<'info, Treasury>,
 }

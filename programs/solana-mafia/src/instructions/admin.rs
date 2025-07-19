@@ -38,10 +38,9 @@ pub fn update_treasury_fee(ctx: Context<UpdateTreasuryFee>, new_fee: u8) -> Resu
 
 #[derive(Accounts)]
 pub struct TogglePause<'info> {
-    /// Authority (admin)
+    #[account(mut)]
     pub authority: Signer<'info>,
     
-    /// Game state to pause/unpause
     #[account(
         mut,
         seeds = [GAME_STATE_SEED],

@@ -1,31 +1,23 @@
 use anchor_lang::prelude::*;
 
-// Import modules
 pub mod constants;
 pub mod error;
-pub mod state;
 pub mod instructions;
+pub mod state;
 pub mod utils;
 
-// Re-export for convenience
-pub use constants::*;
-pub use error::*;
-pub use state::*;
-pub use instructions::*;
-pub use utils::*;
+use instructions::*;
 
-declare_id!("93zp2Qtgaiud9NTG1fYb4qqDddSi98AAx9Px7Gyv3CnM");
+declare_id!("11111111111111111111111111111111");
 
 #[program]
 pub mod solana_mafia {
     use super::*;
 
-    /// Initialize the game with config and state
     pub fn initialize(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> {
         instructions::initialize::handler(ctx, treasury_wallet)
     }
 
-    /// Create a new business for a player
     pub fn create_business(
         ctx: Context<CreateBusiness>,
         business_type: u8,
@@ -34,50 +26,27 @@ pub mod solana_mafia {
         instructions::create_business::handler(ctx, business_type, deposit_amount)
     }
 
-    /// Claim all pending earnings (business + referral)
     pub fn claim_earnings(ctx: Context<ClaimEarnings>) -> Result<()> {
         instructions::claim_earnings::handler(ctx)
     }
 
-    /// Add referral earnings to a player (backend call)
-    pub fn add_referral_earnings(
-        ctx: Context<AddReferralEarnings>,
-        amount: u64,
-    ) -> Result<()> {
-        instructions::process_referral_bonus::handler(ctx, amount)
-    }
-
-    /// Update player's pending earnings (crank instruction)
     pub fn update_earnings(ctx: Context<UpdateEarnings>) -> Result<()> {
         instructions::update_earnings::handler(ctx)
     }
 
-    /// Upgrade a business (admin donation for higher yield)
-    pub fn upgrade_business(
-        ctx: Context<UpgradeBusiness>,
-        business_index: u8,
-    ) -> Result<()> {
-        instructions::upgrade_business::handler(ctx, business_index)
-    }
-
-    /// Sell a business with early exit fee
-    pub fn sell_business(
-        ctx: Context<SellBusiness>,
-        business_index: u8,
-    ) -> Result<()> {
+    pub fn sell_business(ctx: Context<SellBusiness>, business_index: u8) -> Result<()> {
         instructions::sell_business::handler(ctx, business_index)
     }
 
-    /// Toggle game pause (admin only)
-    pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {
-        instructions::admin::toggle_pause(ctx)
+    pub fn upgrade_business(ctx: Context<UpgradeBusiness>, business_index: u8) -> Result<()> {
+        instructions::upgrade_business::handler(ctx, business_index)
     }
 
-    /// Update treasury fee percentage (admin only)
-    pub fn update_treasury_fee(
-        ctx: Context<UpdateTreasuryFee>,
-        new_fee: u8,
-    ) -> Result<()> {
-        instructions::admin::update_treasury_fee(ctx, new_fee)
+    pub fn add_referral_earnings(ctx: Context<AddReferralEarnings>, amount: u64) -> Result<()> {
+        instructions::process_referral_bonus::handler(ctx, amount)
+    }
+
+    pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {
+        instructions::admin::toggle_pause(ctx)
     }
 }

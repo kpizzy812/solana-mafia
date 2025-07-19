@@ -1,9 +1,7 @@
-// instructions/initialize.rs
 use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::state::*;
 
-/// Initialize the game with GameState and GameConfig accounts
 pub fn handler(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> {
     let clock = Clock::get()?;
     
@@ -34,11 +32,11 @@ pub fn handler(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> 
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    /// Authority (admin) who can manage the game
+    /// The authority (admin) of the game
     #[account(mut)]
     pub authority: Signer<'info>,
     
-    /// Global game state account
+    /// Game state PDA
     #[account(
         init,
         payer = authority,
@@ -48,7 +46,7 @@ pub struct Initialize<'info> {
     )]
     pub game_state: Account<'info, GameState>,
     
-    /// Global game configuration account
+    /// Game config PDA
     #[account(
         init,
         payer = authority,
@@ -58,16 +56,16 @@ pub struct Initialize<'info> {
     )]
     pub game_config: Account<'info, GameConfig>,
     
-    /// Treasury PDA to hold game pool funds
+    /// Treasury PDA for holding funds
     #[account(
         init,
         payer = authority,
-        space = 0,
+        space = Treasury::SIZE,
         seeds = [TREASURY_SEED],
         bump
     )]
-    pub treasury_pda: SystemAccount<'info>,
+    pub treasury_pda: Account<'info, Treasury>,
     
-    /// System program for account creation
+    /// System program
     pub system_program: Program<'info, System>,
 }

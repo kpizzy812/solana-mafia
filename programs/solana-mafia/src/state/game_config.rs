@@ -26,7 +26,7 @@ pub struct GameConfig {
     pub upgrade_bonuses: [u16; MAX_UPGRADE_LEVEL as usize],
     
     /// Referral rates for each level
-    pub referral_rates: [u8; MAX_REFERRAL_LEVELS as usize],
+    pub referral_rates: [u8; MAX_REFERRAL_LEVELS],
     
     /// Maximum businesses per player
     pub max_businesses_per_player: u8,
@@ -84,7 +84,7 @@ impl GameConfig {
         if business_type_index < BUSINESS_TYPES_COUNT {
             self.min_deposits[business_type_index]
         } else {
-            u64::MAX
+            0
         }
     }
 
@@ -108,7 +108,7 @@ impl GameConfig {
 
     /// Get referral rate for level
     pub fn get_referral_rate(&self, level: u8) -> u8 {
-        if level > 0 && level <= MAX_REFERRAL_LEVELS {
+        if level > 0 && (level as usize) <= MAX_REFERRAL_LEVELS {
             self.referral_rates[(level - 1) as usize]
         } else {
             0
