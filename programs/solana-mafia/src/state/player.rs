@@ -1,3 +1,4 @@
+// state/player.rs
 use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::state::business::Business;
@@ -9,24 +10,25 @@ pub struct Player {
     pub total_invested: u64,
     pub total_earned: u64,
     pub pending_earnings: u64,
-    pub pending_referral_earnings: u64, // Для начисления с бэка
+    pub pending_referral_earnings: u64,
     pub has_paid_entry: bool,
     pub created_at: i64,
     pub bump: u8,
 }
 
 impl Player {
-    /// Size for account allocation
+    /// Size for account allocation - УВЕЛИЧИВАЕМ для безопасности
     pub const SIZE: usize = 8 + // discriminator
         32 + // owner
-        4 + (Business::SIZE * MAX_BUSINESSES_PER_PLAYER as usize) + // businesses Vec
+        4 + (Business::SIZE * MAX_BUSINESSES_PER_PLAYER as usize) + // businesses Vec (4 bytes length + data)
         8 + // total_invested
         8 + // total_earned
         8 + // pending_earnings
         8 + // pending_referral_earnings
         1 + // has_paid_entry
         8 + // created_at
-        1; // bump
+        1 + // bump
+        100; // 🎯 ДОБАВЛЯЕМ ЗАПАС для Anchor overhead и будущих изменений
 
     /// Create new player
     pub fn new(owner: Pubkey, _referrer: Option<Pubkey>, current_time: i64, bump: u8) -> Self {

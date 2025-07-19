@@ -6,6 +6,7 @@ pub mod update_earnings;
 pub mod admin;
 pub mod sell_business;
 pub mod upgrade_business;
+pub mod add_referral_bonus;
 
 pub use initialize::*;
 pub use create_business::*;
@@ -15,3 +16,4 @@ pub use update_earnings::*;
 pub use admin::*;
 pub use sell_business::*;
 pub use upgrade_business::*;
+pub use add_referral_bonus::*;

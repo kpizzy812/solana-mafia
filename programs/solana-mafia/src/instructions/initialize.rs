@@ -21,6 +21,10 @@ pub fn handler(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> 
         ctx.bumps.game_config,
     );
     
+    // Initialize Treasury PDA
+    let treasury_pda = &mut ctx.accounts.treasury_pda;
+    **treasury_pda = Treasury::new(ctx.bumps.treasury_pda);
+    
     msg!("Solana Mafia initialized successfully!");
     msg!("Authority: {}", ctx.accounts.authority.key());
     msg!("Treasury Wallet: {}", treasury_wallet);

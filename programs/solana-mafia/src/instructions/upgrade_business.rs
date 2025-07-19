@@ -1,9 +1,9 @@
 // instructions/upgrade_business.rs
 use anchor_lang::prelude::*;
+use anchor_lang::system_program;
 use crate::constants::*;
 use crate::state::*;
 use crate::error::*;
-use crate::utils::validation::*;
 
 pub fn handler(
     ctx: Context<UpgradeBusiness>,
@@ -31,8 +31,19 @@ pub fn handler(
     let upgrade_cost = game_config.get_upgrade_cost(next_level)
         .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
     
-    // TODO: Implement payment validation
-    // For now, just upgrade
+    // 🎯 РЕАЛЬНАЯ ПРОВЕРКА И ОПЛАТА АПГРЕЙДА
+    // Весь upgrade_cost идет на кошелек команды (это донат за преимущество)
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.player_owner.to_account_info(),
+                to: ctx.accounts.treasury_wallet.to_account_info(),
+            },
+        ),
+        upgrade_cost,
+    )?;
+    
     // Apply upgrade
     business.upgrade_level = next_level;
     let bonus = game_config.get_upgrade_bonus(next_level);
@@ -41,9 +52,11 @@ pub fn handler(
     // Update statistics
     game_state.add_treasury_collection(upgrade_cost);
     
-    msg!("Business upgraded!");
+    msg!("Business upgraded successfully!");
+    msg!("Business index: {}", business_index);
     msg!("New level: {}", next_level);
-    msg!("Upgrade cost: {} lamports", upgrade_cost);
+    msg!("Upgrade cost: {} lamports (paid to team)", upgrade_cost);
+    msg!("Bonus added: {} basis points", bonus);
     msg!("New daily rate: {} basis points", business.daily_rate);
     
     Ok(())
@@ -51,9 +64,11 @@ pub fn handler(
 
 #[derive(Accounts)]
 pub struct UpgradeBusiness<'info> {
+    /// Player upgrading the business
     #[account(mut)]
     pub player_owner: Signer<'info>,
     
+    /// Player account
     #[account(
         mut,
         seeds = [PLAYER_SEED, player_owner.key().as_ref()],
@@ -62,6 +77,15 @@ pub struct UpgradeBusiness<'info> {
     )]
     pub player: Account<'info, Player>,
     
+    /// Treasury wallet where upgrade fees go (team wallet)
+    /// CHECK: This is validated against game_state.treasury_wallet
+    #[account(
+        mut,
+        address = game_state.treasury_wallet
+    )]
+    pub treasury_wallet: AccountInfo<'info>,
+    
+    /// Game state for statistics
     #[account(
         mut,
         seeds = [GAME_STATE_SEED],
@@ -69,9 +93,13 @@ pub struct UpgradeBusiness<'info> {
     )]
     pub game_state: Account<'info, GameState>,
     
+    /// Game config for upgrade costs and bonuses
     #[account(
         seeds = [GAME_CONFIG_SEED],
         bump = game_config.bump
     )]
     pub game_config: Account<'info, GameConfig>,
+    
+    /// System program for transfers
+    pub system_program: Program<'info, System>,
 }
