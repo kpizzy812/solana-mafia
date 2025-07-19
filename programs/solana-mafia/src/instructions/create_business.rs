@@ -32,20 +32,33 @@ pub fn handler(
         return Err(SolanaMafiaError::InsufficientDeposit.into());
     }
 
-    // Initialize player
     let player = &mut ctx.accounts.player;
     let entry_fee = game_config.entry_fee;
+    let mut total_payment = deposit_amount;
     
-    **player = Player::new(
-        ctx.accounts.owner.key(),
-        None,
-        clock.unix_timestamp,
-        ctx.bumps.player,
-    );
-    player.has_paid_entry = true;
+    // Check if this is a new player (first business)
+    let is_new_player = player.businesses.is_empty();
     
-    // Update game stats for new player
-    game_state.add_player();
+    if is_new_player {
+        // Initialize new player
+        player.owner = ctx.accounts.owner.key();
+        player.businesses = Vec::new();
+        player.total_invested = 0;
+        player.total_earned = 0;
+        player.pending_earnings = 0;
+        player.pending_referral_earnings = 0;
+        player.has_paid_entry = true;
+        player.created_at = clock.unix_timestamp;
+        player.bump = ctx.bumps.player;
+        
+        // Add entry fee to total payment
+        total_payment += entry_fee;
+        
+        // Update game stats for new player
+        game_state.add_player();
+        
+        msg!("New player registered with entry fee: {} lamports", entry_fee);
+    }
 
     // Validate player can create more businesses
     if !player.can_create_business() {
@@ -54,9 +67,9 @@ pub fn handler(
 
     // Calculate treasury fee (20% of deposit goes to team)
     let treasury_fee = (deposit_amount * game_config.treasury_fee_percent as u64) / 100;
-    let total_treasury = entry_fee + treasury_fee;
+    let total_treasury = if is_new_player { entry_fee + treasury_fee } else { treasury_fee };
     
-    // Transfer total treasury amount to treasury wallet
+    // Transfer treasury amount to treasury wallet (team)
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -68,7 +81,7 @@ pub fn handler(
         total_treasury,
     )?;
 
-    // Transfer game pool portion to treasury PDA
+    // Transfer game pool portion to treasury PDA (80% of deposit)
     let game_pool_amount = deposit_amount - treasury_fee;
     system_program::transfer(
         CpiContext::new(
@@ -83,7 +96,7 @@ pub fn handler(
 
     // Create business
     let business = Business::new(
-        business_enum.clone(),
+        business_enum,
         deposit_amount,
         daily_rate,
         clock.unix_timestamp,
@@ -102,9 +115,12 @@ pub fn handler(
     msg!("Type: {:?}", business_enum);
     msg!("Investment: {} lamports", deposit_amount);
     msg!("Daily rate: {} basis points", daily_rate);
-    msg!("Entry fee: {} lamports", entry_fee);
+    if is_new_player {
+        msg!("Entry fee: {} lamports", entry_fee);
+    }
     msg!("Treasury fee: {} lamports", treasury_fee);
     msg!("Game pool: {} lamports", game_pool_amount);
+    msg!("Total businesses: {}", player.businesses.len());
 
     Ok(())
 }
@@ -116,9 +132,9 @@ pub struct CreateBusiness<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    /// Player account (created new each time)
+    /// Player account (init_if_needed for new players)
     #[account(
-        init,
+        init_if_needed,
         payer = owner,
         space = Player::SIZE,
         seeds = [PLAYER_SEED, owner.key().as_ref()],
