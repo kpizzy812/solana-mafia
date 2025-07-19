@@ -66,48 +66,83 @@ impl Player {
             return Err(crate::error::SolanaMafiaError::MaxBusinessesReached.into());
         }
         self.businesses.push(business);
-        self.total_invested += business.invested_amount;
+        
+        // 🔒 Защита от overflow
+        self.total_invested = self.total_invested
+            .checked_add(business.invested_amount)
+            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+        
         Ok(())
     }
 
     /// Update pending earnings for all businesses
-    pub fn update_pending_earnings(&mut self, current_time: i64) {
+    pub fn update_pending_earnings(&mut self, current_time: i64) -> Result<()> {
         for business in &mut self.businesses {
             if business.is_active {
                 let pending = business.calculate_pending_earnings(current_time);
-                self.pending_earnings += pending;
+                
+                // 🔒 Защита от overflow
+                self.pending_earnings = self.pending_earnings
+                    .checked_add(pending)
+                    .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+                    
                 business.last_claim = current_time;
             }
         }
+        Ok(())
     }
 
     /// Get total claimable amount (earnings + referral)
-    pub fn get_claimable_amount(&self) -> u64 {
-        self.pending_earnings + self.pending_referral_earnings
+    pub fn get_claimable_amount(&self) -> Result<u64> {
+        self.pending_earnings
+            .checked_add(self.pending_referral_earnings)
+            .ok_or(crate::error::SolanaMafiaError::MathOverflow.into())
     }
 
     /// Claim all earnings
-    pub fn claim_all_earnings(&mut self) {
-        let total_claimed = self.pending_earnings + self.pending_referral_earnings;
-        self.total_earned += total_claimed;
+    pub fn claim_all_earnings(&mut self) -> Result<()> {
+        let total_claimed = self.pending_earnings
+            .checked_add(self.pending_referral_earnings)
+            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            
+        // 🔒 Защита от overflow
+        self.total_earned = self.total_earned
+            .checked_add(total_claimed)
+            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            
         self.pending_earnings = 0;
         self.pending_referral_earnings = 0;
+        Ok(())
     }
 
     /// Add referral bonus (called from backend)
-    pub fn add_referral_bonus(&mut self, amount: u64) {
-        self.pending_referral_earnings += amount;
+    pub fn add_referral_bonus(&mut self, amount: u64) -> Result<()> {
+        // 🔒 Защита от overflow
+        self.pending_referral_earnings = self.pending_referral_earnings
+            .checked_add(amount)
+            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+        Ok(())
     }
 
     /// Claim earnings
-    pub fn claim_earnings(&mut self, amount: u64) {
+    pub fn claim_earnings(&mut self, amount: u64) -> Result<()> {
         self.pending_earnings = self.pending_earnings.saturating_sub(amount);
-        self.total_earned += amount;
+        
+        // 🔒 Защита от overflow
+        self.total_earned = self.total_earned
+            .checked_add(amount)
+            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+        Ok(())
     }
 
-    /// Claim referral earnings
-    pub fn claim_referral_earnings(&mut self, amount: u64) {
+    /// Claim referral earnings  
+    pub fn claim_referral_earnings(&mut self, amount: u64) -> Result<()> {
         self.pending_referral_earnings = self.pending_referral_earnings.saturating_sub(amount);
-        self.total_earned += amount;
+        
+        // 🔒 Защита от overflow
+        self.total_earned = self.total_earned
+            .checked_add(amount)
+            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+        Ok(())
     }
 }

@@ -44,13 +44,17 @@ pub fn handler(
         upgrade_cost,
     )?;
     
-    // Apply upgrade
+    // Apply upgrade with overflow protection
     business.upgrade_level = next_level;
     let bonus = game_config.get_upgrade_bonus(next_level);
-    business.daily_rate += bonus;
+    business.daily_rate = business.daily_rate
+        .checked_add(bonus)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
     
-    // Update statistics
-    game_state.add_treasury_collection(upgrade_cost);
+    // Update statistics with overflow protection
+    game_state.total_treasury_collected = game_state.total_treasury_collected
+        .checked_add(upgrade_cost)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
     
     msg!("Business upgraded successfully!");
     msg!("Business index: {}", business_index);

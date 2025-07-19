@@ -11,10 +11,24 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
     let player = &mut ctx.accounts.player;
     let game_state = &mut ctx.accounts.game_state;
 
+    // 🔒 RATE LIMITING: проверяем время последнего вывода
+    if player.businesses.len() > 0 {
+        // Ищем последний claim среди всех бизнесов
+        let last_claim = player.businesses.iter()
+            .map(|b| b.last_claim)
+            .max()
+            .unwrap_or(0);
+            
+        let time_since_last_claim = clock.unix_timestamp - last_claim;
+        if time_since_last_claim < CLAIM_EARNINGS_COOLDOWN {
+            return Err(SolanaMafiaError::TooEarlyToClaim.into());
+        }
+    }
+
     // Update pending earnings first
-    player.update_pending_earnings(clock.unix_timestamp);
+    player.update_pending_earnings(clock.unix_timestamp)?;
     
-    let claimable_amount = player.get_claimable_amount();
+    let claimable_amount = player.get_claimable_amount()?;
     
     if claimable_amount == 0 {
         return Err(SolanaMafiaError::NoEarningsToClaim.into());
@@ -46,10 +60,12 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
     )?;
 
     // Обновляем состояние игрока
-    player.claim_all_earnings();
+    player.claim_all_earnings()?;
     
-    // Обновляем глобальную статистику
-    game_state.add_withdrawal(claimable_amount);
+    // Обновляем глобальную статистику с защитой от overflow
+    game_state.total_withdrawn = game_state.total_withdrawn
+        .checked_add(claimable_amount)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
 
     msg!("Earnings claimed successfully!");
     msg!("Player: {}", player.owner);

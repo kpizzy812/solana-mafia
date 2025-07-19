@@ -3,8 +3,8 @@ use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::state::*;
 
-/// Простая инструкция для добавления реферального бонуса
-/// Вызывается бэкендом после расчета сложной логики
+/// Безопасная инструкция для добавления реферального бонуса
+/// Вызывается только админом или уполномоченным бэкендом
 pub fn handler(
     ctx: Context<AddReferralBonus>,
     amount: u64,
@@ -12,11 +12,15 @@ pub fn handler(
     let player = &mut ctx.accounts.player;
     let game_state = &mut ctx.accounts.game_state;
     
-    // Добавляем бонус к pending_referral_earnings игрока
-    player.add_referral_bonus(amount);
+    // Добавляем бонус к pending_referral_earnings игрока с защитой от overflow
+    player.pending_referral_earnings = player.pending_referral_earnings
+        .checked_add(amount)
+        .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
     
-    // Обновляем глобальную статистику
-    game_state.add_referral_payment(amount);
+    // Обновляем глобальную статистику с защитой от overflow
+    game_state.total_referral_paid = game_state.total_referral_paid
+        .checked_add(amount)
+        .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
     
     msg!("Referral bonus added successfully!");
     msg!("Player: {}", player.owner);
@@ -28,6 +32,12 @@ pub fn handler(
 
 #[derive(Accounts)]
 pub struct AddReferralBonus<'info> {
+    /// Authority or backend signer - ТОЛЬКО ОНИ МОГУТ ДОБАВЛЯТЬ БОНУСЫ!
+    #[account(
+        constraint = authority.key() == game_state.authority @ crate::error::SolanaMafiaError::UnauthorizedAdmin
+    )]
+    pub authority: Signer<'info>,
+    
     /// Player receiving the referral bonus
     #[account(
         mut,
@@ -45,6 +55,6 @@ pub struct AddReferralBonus<'info> {
     pub game_state: Account<'info, GameState>,
 }
 
-// НЕ ТРЕБУЕТ ПОДПИСИ! 
-// Бэкенд может вызывать эту инструкцию без подписи игрока
-// Это безопасно, так как мы только ДОБАВЛЯЕМ деньги игроку, не списываем
+// 🔒 ТЕПЕРЬ БЕЗОПАСНО!
+// Только authority (админ) может добавлять реферальные бонусы
+// Защита от накрутки и опустошения treasury

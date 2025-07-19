@@ -34,7 +34,6 @@ pub fn handler(
 
     let player = &mut ctx.accounts.player;
     let entry_fee = game_config.entry_fee;
-    let mut total_payment = deposit_amount;
     
     // Check if this is a new player (first business)
     let is_new_player = player.businesses.is_empty();
@@ -51,13 +50,18 @@ pub fn handler(
         player.created_at = clock.unix_timestamp;
         player.bump = ctx.bumps.player;
         
-        // Add entry fee to total payment
-        total_payment += entry_fee;
-        
         // Update game stats for new player
         game_state.add_player();
         
         msg!("New player registered with entry fee: {} lamports", entry_fee);
+    } else {
+        // 🔒 RATE LIMITING: проверяем время последней покупки
+        if let Some(last_business) = player.businesses.last() {
+            let time_since_last = clock.unix_timestamp - last_business.created_at;
+            if time_since_last < BUSINESS_CREATE_COOLDOWN {
+                return Err(SolanaMafiaError::TooEarlyToCreateBusiness.into());
+            }
+        }
     }
 
     // Validate player can create more businesses
@@ -66,8 +70,17 @@ pub fn handler(
     }
 
     // Calculate treasury fee (20% of deposit goes to team)
-    let treasury_fee = (deposit_amount * game_config.treasury_fee_percent as u64) / 100;
-    let total_treasury = if is_new_player { entry_fee + treasury_fee } else { treasury_fee };
+    let treasury_fee = deposit_amount
+        .checked_mul(game_config.treasury_fee_percent as u64)
+        .and_then(|x| x.checked_div(100))
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+    let total_treasury = if is_new_player { 
+        entry_fee.checked_add(treasury_fee)
+            .ok_or(SolanaMafiaError::MathOverflow)?
+    } else { 
+        treasury_fee 
+    };
     
     // Transfer treasury amount to treasury wallet (team)
     system_program::transfer(
@@ -82,7 +95,10 @@ pub fn handler(
     )?;
 
     // Transfer game pool portion to treasury PDA (80% of deposit)
-    let game_pool_amount = deposit_amount - treasury_fee;
+    let game_pool_amount = deposit_amount
+        .checked_sub(treasury_fee)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+        
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -102,14 +118,21 @@ pub fn handler(
         clock.unix_timestamp,
     );
 
-    // Add business to player
+    // Add business to player (с защитой от overflow)
     player.add_business(business)?;
-    player.total_invested += deposit_amount;
 
-    // Update game statistics
-    game_state.add_investment(deposit_amount);
-    game_state.add_treasury_collection(total_treasury);
-    game_state.add_business();
+    // Update game statistics (с защитой от overflow)
+    game_state.total_invested = game_state.total_invested
+        .checked_add(deposit_amount)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+    game_state.total_treasury_collected = game_state.total_treasury_collected
+        .checked_add(total_treasury)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+    game_state.total_businesses = game_state.total_businesses
+        .checked_add(1)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
 
     msg!("Business created successfully!");
     msg!("Type: {:?}", business_enum);

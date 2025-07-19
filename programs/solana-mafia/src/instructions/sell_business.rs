@@ -37,7 +37,7 @@ pub fn handler(
     let return_amount = business.invested_amount - sell_fee;
     
     // Check if treasury has enough funds
-    let treasury_balance = ctx.accounts.treasury_pda.lamports();
+    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
     if treasury_balance < return_amount {
         return Err(ProgramError::InsufficientFunds.into());
     }
