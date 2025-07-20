@@ -13,7 +13,6 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
 
     // 🔒 RATE LIMITING: проверяем время последнего вывода
     if player.businesses.len() > 0 {
-        // Ищем последний claim среди всех бизнесов
         let last_claim = player.businesses.iter()
             .map(|b| b.last_claim)
             .max()
@@ -34,21 +33,82 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
         return Err(SolanaMafiaError::NoEarningsToClaim.into());
     }
 
-    // 🎯 РЕАЛЬНЫЙ ПЕРЕВОД SOL из treasury_pda к игроку
+    // 🔒 НОВАЯ ЗАЩИТА 1: Проверяем что сумма не превышает разумные лимиты
+    let max_daily_claim = player.total_invested
+        .checked_mul(150) // Максимум 1.5% в день
+        .and_then(|x| x.checked_div(10000))
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    if claimable_amount > max_daily_claim {
+        return Err(SolanaMafiaError::InvalidUpgradeLevel.into()); // Переиспользуем error
+    }
+
+    // 🔒 НОВАЯ ЗАЩИТА 2: Улучшенная проверка баланса treasury
+    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
+    
+    // Проверяем что в treasury достаточно средств + запас 10%
+    let required_balance = claimable_amount
+        .checked_mul(110)
+        .and_then(|x| x.checked_div(100))
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    if treasury_balance < required_balance {
+        msg!("⚠️ Недостаточно средств в treasury!");
+        msg!("Требуется: {}, доступно: {}", required_balance, treasury_balance);
+        return Err(ProgramError::InsufficientFunds.into());
+    }
+
+    // 🔒 НОВАЯ ЗАЩИТА 3: Проверяем общую экономику системы
+    let total_pending_system = game_state.total_invested
+        .checked_sub(game_state.total_withdrawn)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    // Выплата не должна превышать 5% от общих pending в системе
+    let max_system_withdrawal = total_pending_system
+        .checked_div(20) // 5%
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    if claimable_amount > max_system_withdrawal {
+        msg!("⚠️ Выплата превышает лимиты системы!");
+        msg!("Запрошено: {}, максимум: {}", claimable_amount, max_system_withdrawal);
+        return Err(SolanaMafiaError::InvalidUpgradeLevel.into());
+    }
+
+    // 🔒 НОВАЯ ЗАЩИТА 4: Проверяем соотношение реферальных и обычных earnings
+    if player.pending_referral_earnings > 0 {
+        // Реферальные earnings не должны превышать 20% от обычных
+        let max_referral_allowed = player.pending_earnings
+            .checked_div(5) // 20%
+            .unwrap_or(0);
+        
+        if player.pending_referral_earnings > max_referral_allowed {
+            msg!("⚠️ Подозрительно высокие реферальные выплаты!");
+            msg!("Реферальные: {}, обычные: {}", player.pending_referral_earnings, player.pending_earnings);
+            
+            // Ограничиваем реферальные выплаты
+            let old_referral = player.pending_referral_earnings;
+            player.pending_referral_earnings = max_referral_allowed;
+            
+            msg!("Реферальные выплаты ограничены: {} -> {}", old_referral, max_referral_allowed);
+        }
+    }
+
+    // Пересчитываем claimable_amount после всех проверок и ограничений
+    let final_claimable_amount = player.get_claimable_amount()?;
+
+    // 🎯 БЕЗОПАСНЫЙ ПЕРЕВОД SOL из treasury_pda к игроку
     let treasury_seeds = &[
         TREASURY_SEED,
         &[ctx.accounts.treasury_pda.bump],
     ];
     let treasury_signer = &[&treasury_seeds[..]];
 
-    // Создаем инструкцию перевода
     let transfer_instruction = system_instruction::transfer(
         &ctx.accounts.treasury_pda.key(),
         &ctx.accounts.player_owner.key(),
-        claimable_amount,
+        final_claimable_amount,
     );
 
-    // Выполняем перевод с подписью treasury PDA
     invoke_signed(
         &transfer_instruction,
         &[
@@ -64,13 +124,15 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
     
     // Обновляем глобальную статистику с защитой от overflow
     game_state.total_withdrawn = game_state.total_withdrawn
-        .checked_add(claimable_amount)
+        .checked_add(final_claimable_amount)
         .ok_or(SolanaMafiaError::MathOverflow)?;
 
-    msg!("Earnings claimed successfully!");
+    msg!("💰 Безопасная выплата завершена!");
     msg!("Player: {}", player.owner);
-    msg!("Amount claimed: {} lamports", claimable_amount);
-    msg!("Total earned: {} lamports", player.total_earned);
+    msg!("Amount claimed: {} lamports", final_claimable_amount);
+    msg!("Treasury balance after: {}", 
+         treasury_balance.checked_sub(final_claimable_amount).unwrap_or(0));
+    msg!("Total system withdrawn: {} lamports", game_state.total_withdrawn);
     
     Ok(())
 }
@@ -98,7 +160,7 @@ pub struct ClaimEarnings<'info> {
     )]
     pub treasury_pda: Account<'info, Treasury>,
 
-    /// Game state for statistics
+    /// Game state for statistics and security checks
     #[account(
         mut,
         seeds = [GAME_STATE_SEED],

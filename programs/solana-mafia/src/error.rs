@@ -63,4 +63,11 @@ pub enum SolanaMafiaError {
     
     #[msg("Too early to update earnings")]
     TooEarlyToUpdate,
+    
+    // 🆘 EMERGENCY ERRORS
+    #[msg("Emergency pause activated")]
+    EmergencyPauseActive,
+    
+    #[msg("Only emergency admin can use this function")]
+    UnauthorizedEmergencyAdmin,
 }
