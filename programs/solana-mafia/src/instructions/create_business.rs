@@ -272,9 +272,9 @@ pub struct CreateBusiness<'info> {
     #[account(
         mut,
         seeds = [TREASURY_SEED],
-        bump
+        bump = treasury_pda.bump
     )]
-    pub treasury_pda: SystemAccount<'info>,
+    pub treasury_pda: Account<'info, Treasury>,
 
     /// System program
     pub system_program: Program<'info, System>,

@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::state::Player;
 
 pub mod constants;
 pub mod error;
@@ -8,7 +9,7 @@ pub mod utils;
 
 use instructions::*;
 
-declare_id!("11111111111111111111111111111111");
+declare_id!("Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU");
 
 #[program]
 pub mod solana_mafia {
