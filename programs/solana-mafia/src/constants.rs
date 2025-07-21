@@ -1,5 +1,5 @@
 // constants.rs
-use anchor_lang::prelude::*;
+// Убрал неиспользуемый импорт anchor_lang::prelude::*
 
 // ============================================================================
 // PROGRAM CONSTANTS

@@ -1,7 +1,6 @@
 // instructions/claim_earnings.rs
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke_signed;
-use anchor_lang::solana_program::system_instruction;
+use anchor_lang::system_program;
 use crate::constants::*;
 use crate::state::*;
 use crate::error::*;
@@ -96,27 +95,23 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
     // Пересчитываем claimable_amount после всех проверок и ограничений
     let final_claimable_amount = player.get_claimable_amount()?;
 
-    // 🎯 БЕЗОПАСНЫЙ ПЕРЕВОД SOL из treasury_pda к игроку
+    // 🎯 БЕЗОПАСНЫЙ ПЕРЕВОД SOL из treasury_pda к игроку используя новый system_program
     let treasury_seeds = &[
         TREASURY_SEED,
         &[ctx.accounts.treasury_pda.bump],
     ];
     let treasury_signer = &[&treasury_seeds[..]];
 
-    let transfer_instruction = system_instruction::transfer(
-        &ctx.accounts.treasury_pda.key(),
-        &ctx.accounts.player_owner.key(),
-        final_claimable_amount,
-    );
-
-    invoke_signed(
-        &transfer_instruction,
-        &[
-            ctx.accounts.treasury_pda.to_account_info(),
-            ctx.accounts.player_owner.to_account_info(),
+    system_program::transfer(
+        CpiContext::new_with_signer(
             ctx.accounts.system_program.to_account_info(),
-        ],
-        treasury_signer,
+            system_program::Transfer {
+                from: ctx.accounts.treasury_pda.to_account_info(),
+                to: ctx.accounts.player_owner.to_account_info(),
+            },
+            treasury_signer,
+        ),
+        final_claimable_amount,
     )?;
 
     // Обновляем состояние игрока

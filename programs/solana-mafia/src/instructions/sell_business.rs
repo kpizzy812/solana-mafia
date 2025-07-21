@@ -1,11 +1,11 @@
 // instructions/sell_business.rs
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
-use anchor_lang::solana_program::system_instruction;
+use anchor_lang::system_program;
 use crate::constants::*;
 use crate::state::*;
 use crate::error::*;
-use crate::utils::calculations::*;
+// Убрал неиспользуемый импорт crate::utils::calculations::*
 
 pub fn handler(
     ctx: Context<SellBusiness>,
@@ -49,22 +49,17 @@ pub fn handler(
     ];
     let treasury_signer = &[&treasury_seeds[..]];
 
-    // Making transfer instruction
-    let transfer_instruction = system_instruction::transfer(
-        &ctx.accounts.treasury_pda.key(),
-        &ctx.accounts.player_owner.key(),
-        return_amount,
-    );
-
-    // Doing transfer with a treasury PDA signature
-    invoke_signed(
-        &transfer_instruction,
-        &[
-            ctx.accounts.treasury_pda.to_account_info(),
-            ctx.accounts.player_owner.to_account_info(),
+    // Making transfer instruction using system_program instead of deprecated system_instruction
+    let transfer_ix = system_program::transfer(
+        CpiContext::new_with_signer(
             ctx.accounts.system_program.to_account_info(),
-        ],
-        treasury_signer,
+            system_program::Transfer {
+                from: ctx.accounts.treasury_pda.to_account_info(),
+                to: ctx.accounts.player_owner.to_account_info(),
+            },
+            treasury_signer,
+        ),
+        return_amount,
     )?;
     
     // Deactivate business

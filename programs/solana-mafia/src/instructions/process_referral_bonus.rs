@@ -12,8 +12,8 @@ pub fn handler(
     let player = &mut ctx.accounts.player;
     let game_state = &mut ctx.accounts.game_state;
     
-    // Add bonus to player's pending referral earnings
-    player.add_referral_bonus(amount);
+    // Add bonus to player's pending referral earnings - ИСПРАВЛЕНО: обрабатываем Result
+    player.add_referral_bonus(amount)?;
     
     // Update game statistics
     game_state.add_referral_payment(amount);

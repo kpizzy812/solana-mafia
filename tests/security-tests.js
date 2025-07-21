@@ -8,11 +8,7 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
 
   const program = anchor.workspace.SolanaMafia;
   
-  // 🔧 УНИКАЛЬНЫЕ PDA для security тестов
-  const testSeed = `security_${Date.now()}`;
-  const treasuryWallet = anchor.web3.Keypair.generate();
-  
-  // PDA аккаунты
+  // 🔧 ИСПРАВЛЕНО: Используем ГЛОБАЛЬНЫЕ PDA (как в основных тестах)
   let gameStatePda, gameConfigPda, treasuryPda;
   
   // Тестовые игроки
@@ -20,17 +16,20 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
   let attackerPda, victimPda, whitehatPda;
 
   before(async () => {
-    console.log("🛡️ Starting Security Tests with unique PDAs...");
+    console.log("🛡️ Starting Security Tests with global PDAs...");
     
-    // Генерация уникальных PDA
+    // 🏛️ ГЛОБАЛЬНЫЕ PDA - БЕЗ уникальных seeds!
     [gameStatePda] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("game_state"), Buffer.from(testSeed)], program.programId
+      [Buffer.from("game_state")], // БЕЗ дополнительных seeds
+      program.programId
     );
     [gameConfigPda] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("game_config"), Buffer.from(testSeed)], program.programId
+      [Buffer.from("game_config")], // БЕЗ дополнительных seeds
+      program.programId
     );
     [treasuryPda] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("treasury"), Buffer.from(testSeed)], program.programId
+      [Buffer.from("treasury")], // БЕЗ дополнительных seeds
+      program.programId
     );
 
     // Создание игроков
@@ -48,60 +47,68 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
       [Buffer.from("player"), whitehat.publicKey.toBuffer()], program.programId
     );
 
+    console.log("📍 Using Global PDAs:");
+    console.log("Game State:", gameStatePda.toString());
+    console.log("Game Config:", gameConfigPda.toString());
+    console.log("Treasury PDA:", treasuryPda.toString());
+
     // Airdrop SOL
-    for (const keypair of [treasuryWallet, attacker, victim, whitehat]) {
+    for (const keypair of [attacker, victim, whitehat]) {
       try {
         await provider.connection.confirmTransaction(
           await provider.connection.requestAirdrop(keypair.publicKey, 10 * LAMPORTS_PER_SOL)
         );
+        console.log(`✅ Airdrop for ${keypair.publicKey.toString()}`);
       } catch (error) {
         console.log("⚠️ Airdrop failed for", keypair.publicKey.toString());
       }
     }
 
-    // Инициализация игры
+    // 🔍 Проверяем что глобальная игра уже инициализирована
     try {
-      await program.methods
-        .initialize(treasuryWallet.publicKey)
-        .accounts({
-          authority: provider.wallet.publicKey,
-          gameState: gameStatePda,
-          gameConfig: gameConfigPda,
-          treasuryPda: treasuryPda,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
+      const gameState = await program.account.gameState.fetch(gameStatePda);
+      console.log("✅ Game already initialized");
+      console.log("Treasury Wallet:", gameState.treasuryWallet.toString());
 
-      console.log("✅ Security test game initialized");
-    } catch (error) {
-      console.log("⚠️ Security test init error:", error.message);
-      return; // Skip если не удается инициализировать
-    }
+      // Создание игроков в существующей игре
+      const treasuryWallet = gameState.treasuryWallet;
 
-    // Создание игроков
-    for (const [keypair, pda] of [[attacker, attackerPda], [victim, victimPda], [whitehat, whitehatPda]]) {
-      try {
-        await program.methods
-          .createPlayer()
-          .accounts({
-            owner: keypair.publicKey,
-            player: pda,
-            gameConfig: gameConfigPda,
-            gameState: gameStatePda,
-            treasuryWallet: treasuryWallet.publicKey,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([keypair])
-          .rpc();
-      } catch (error) {
-        console.log("⚠️ Player creation error for", keypair.publicKey.toString(), ":", error.message);
+      for (const [keypair, pda, name] of [
+        [attacker, attackerPda, "Attacker"], 
+        [victim, victimPda, "Victim"],
+        [whitehat, whitehatPda, "Whitehat"]
+      ]) {
+        try {
+          await program.methods
+            .createPlayer()
+            .accounts({
+              owner: keypair.publicKey,
+              player: pda,
+              gameConfig: gameConfigPda,
+              gameState: gameStatePda,
+              treasuryWallet: treasuryWallet,
+              systemProgram: SystemProgram.programId,
+            })
+            .signers([keypair])
+            .rpc();
+          
+          console.log(`✅ Created ${name}: ${keypair.publicKey.toString()}`);
+        } catch (error) {
+          console.log(`⚠️ ${name} creation error:`, error.message);
+        }
       }
+
+    } catch (error) {
+      console.log("❌ Game not initialized! Please run devnet-real-test.js first");
+      console.log("Error:", error.message);
     }
   });
 
   describe("🚨 REENTRANCY ATTACKS", () => {
     it("❌ Блокирует двойной claim_earnings в одной транзакции", async () => {
       try {
+        const gameState = await program.account.gameState.fetch(gameStatePda);
+
         // Создаем бизнес для жертвы
         await program.methods
           .createBusiness(0, new anchor.BN(0.1 * LAMPORTS_PER_SOL))
@@ -110,7 +117,7 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
             player: victimPda,
             gameConfig: gameConfigPda,
             gameState: gameStatePda,
-            treasuryWallet: treasuryWallet.publicKey,
+            treasuryWallet: gameState.treasuryWallet,
             treasuryPda: treasuryPda,
             systemProgram: SystemProgram.programId,
           })
@@ -192,8 +199,10 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
         assert.fail("Должен был заблокировать доступ к чужому аккаунту");
       } catch (error) {
         console.log("✅ Access control работает:", error.message);
+        // 🔧 ИСПРАВЛЕНО: Обновленная проверка ошибок
         assert(error.message.includes("ConstraintSeeds") || 
-               error.message.includes("seeds constraint"));
+               error.message.includes("seeds constraint") ||
+               error.message.includes("A seeds constraint was violated"));
       }
     });
 
@@ -212,8 +221,10 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
         assert.fail("Должен был заблокировать обновление чужих earnings");
       } catch (error) {
         console.log("✅ Update earnings protection работает:", error.message);
+        // 🔧 ИСПРАВЛЕНО: Обновленная проверка ошибок
         assert(error.message.includes("ConstraintSeeds") || 
-               error.message.includes("UnauthorizedAdmin"));
+               error.message.includes("UnauthorizedAdmin") ||
+               error.message.includes("A seeds constraint was violated"));
       }
     });
   });
@@ -221,6 +232,7 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
   describe("⚡ OVERFLOW/UNDERFLOW ATTACKS", () => {
     it("❌ Защищает от overflow в earnings", async () => {
       try {
+        const gameState = await program.account.gameState.fetch(gameStatePda);
         const maxValue = new anchor.BN("18446744073709551615"); // u64::MAX
         
         await program.methods
@@ -230,7 +242,7 @@ describe("🛡️ SECURITY & ATTACK TESTS", () => {
             player: attackerPda,
             gameConfig: gameConfigPda,
             gameState: gameStatePda,
-            treasuryWallet: treasuryWallet.publicKey,
+            treasuryWallet: gameState.treasuryWallet,
             treasuryPda: treasuryPda,
             systemProgram: SystemProgram.programId,
           })

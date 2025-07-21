@@ -17,12 +17,12 @@ pub mod solana_mafia {
 
     /// Initialize the game with treasury wallet
     pub fn initialize(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> {
-        instructions::initialize::handler(ctx, treasury_wallet)
+        initialize_handler(ctx, treasury_wallet)
     }
 
     /// 🔒 НОВОЕ: Создание игрока (отдельно от бизнеса)
     pub fn create_player(ctx: Context<CreatePlayer>) -> Result<()> {
-        instructions::create_business::create_player(ctx)
+        instructions::create_player(ctx)
     }
 
     /// 🔒 БЕЗОПАСНОЕ создание бизнеса (требует existing player)
@@ -35,7 +35,7 @@ pub mod solana_mafia {
         if ctx.accounts.game_state.is_paused {
             return Err(error::SolanaMafiaError::GamePaused.into());
         }
-        instructions::create_business::handler(ctx, business_type, deposit_amount)
+        create_business_handler(ctx, business_type, deposit_amount)
     }
 
     /// 🔒 БЕЗОПАСНЫЙ claim earnings (с лимитами)
@@ -44,12 +44,12 @@ pub mod solana_mafia {
         if ctx.accounts.game_state.is_paused {
             return Err(error::SolanaMafiaError::GamePaused.into());
         }
-        instructions::claim_earnings::handler(ctx)
+        claim_earnings_handler(ctx)
     }
 
     /// 🔒 БЕЗОПАСНЫЙ update earnings (только владелец)
     pub fn update_earnings(ctx: Context<UpdateEarnings>) -> Result<()> {
-        instructions::update_earnings::handler(ctx)
+        update_earnings_handler(ctx)
     }
 
     /// 🔒 БЕЗОПАСНАЯ продажа бизнеса
@@ -58,7 +58,7 @@ pub mod solana_mafia {
         if ctx.accounts.game_state.is_paused {
             return Err(error::SolanaMafiaError::GamePaused.into());
         }
-        instructions::sell_business::handler(ctx, business_index)
+        sell_business_handler(ctx, business_index)
     }
 
     /// 🔒 БЕЗОПАСНЫЙ upgrade бизнеса
@@ -67,7 +67,7 @@ pub mod solana_mafia {
         if ctx.accounts.game_state.is_paused {
             return Err(error::SolanaMafiaError::GamePaused.into());
         }
-        instructions::upgrade_business::handler(ctx, business_index)
+        upgrade_business_handler(ctx, business_index)
     }
 
     /// 🔒 ОТКЛЮЧЕНО: Реферальные бонусы (слишком опасно для первой версии)
@@ -79,17 +79,17 @@ pub mod solana_mafia {
 
     /// Admin: Toggle game pause state
     pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {
-        instructions::admin::toggle_pause(ctx)
+        instructions::toggle_pause(ctx)
     }
 
     /// 🆘 EMERGENCY: Stop all financial operations
     pub fn emergency_pause(ctx: Context<EmergencyPause>) -> Result<()> {
-        instructions::admin::emergency_pause(ctx)
+        instructions::emergency_pause(ctx)
     }
 
     /// 🔓 EMERGENCY: Resume financial operations  
     pub fn emergency_unpause(ctx: Context<EmergencyPause>) -> Result<()> {
-        instructions::admin::emergency_unpause(ctx)
+        instructions::emergency_unpause(ctx)
     }
 
     /// Admin: Update business rates with safety checks
@@ -97,17 +97,17 @@ pub mod solana_mafia {
         ctx: Context<UpdateBusinessRates>, 
         new_rates: [u16; 6]
     ) -> Result<()> {
-        instructions::admin::update_business_rates(ctx, new_rates)
+        instructions::update_business_rates(ctx, new_rates)
     }
 
     /// Admin: Update treasury fee (with limits)
     pub fn update_treasury_fee(ctx: Context<UpdateTreasuryFee>, new_fee: u8) -> Result<()> {
-        instructions::admin::update_treasury_fee(ctx, new_fee)
+        instructions::update_treasury_fee(ctx, new_fee)
     }
 
     /// View: Get treasury statistics and health
     pub fn get_treasury_stats(ctx: Context<GetTreasuryStats>) -> Result<()> {
-        instructions::admin::get_treasury_stats(ctx)
+        instructions::get_treasury_stats(ctx)
     }
 
     /// 🔒 НОВОЕ: Health check для игрока
