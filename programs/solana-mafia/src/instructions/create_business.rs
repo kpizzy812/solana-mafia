@@ -22,11 +22,6 @@ pub fn create_player(ctx: Context<CreatePlayer>) -> Result<()> {
         return Err(SolanaMafiaError::UnauthorizedAdmin.into());
     }
     
-    // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
-    if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
-        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
-    }
-    
     // 🔒 Платим entry fee при создании игрока
     let entry_fee = game_config.entry_fee;
     
@@ -276,9 +271,9 @@ pub struct CreateBusiness<'info> {
     #[account(
         mut,
         seeds = [TREASURY_SEED],
-        bump
+        bump = treasury_pda.bump
     )]
-    pub treasury_pda: SystemAccount<'info>,
+    pub treasury_pda: Account<'info, Treasury>,
 
     /// System program
     pub system_program: Program<'info, System>,

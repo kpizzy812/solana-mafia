@@ -6,6 +6,9 @@ anchor_version = "0.31.1"
 resolution = true
 skip-lint = false
 
+[programs.devnet]
+solana_mafia = "Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU"
+
 [programs.localnet]
 solana_mafia = "Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU"
 

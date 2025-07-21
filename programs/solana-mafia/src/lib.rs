@@ -7,8 +7,9 @@ pub mod state;
 pub mod utils;
 
 use instructions::*;
+use state::*;
 
-declare_id!("93zp2Qtgaiud9NTG1fYb4qqDddSi98AAx9Px7Gyv3CnM");
+declare_id!("Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU");
 
 #[program]
 pub mod solana_mafia {
