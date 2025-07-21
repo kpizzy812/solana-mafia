@@ -17,6 +17,16 @@ pub fn create_player(ctx: Context<CreatePlayer>) -> Result<()> {
         return Err(SolanaMafiaError::GamePaused.into());
     }
     
+    // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
+    if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
+        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+    }
+    
+    // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
+    if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
+        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+    }
+    
     // 🔒 Платим entry fee при создании игрока
     let entry_fee = game_config.entry_fee;
     
@@ -218,10 +228,7 @@ pub struct CreatePlayer<'info> {
 
     /// Treasury wallet where entry fee goes
     /// CHECK: This is validated against game_state.treasury_wallet
-    #[account(
-        mut,
-        address = game_state.treasury_wallet
-    )]
+    #[account(mut)]
     pub treasury_wallet: AccountInfo<'info>,
 
     /// System program
@@ -261,20 +268,17 @@ pub struct CreateBusiness<'info> {
     pub game_state: Account<'info, GameState>,
 
     /// Treasury wallet where team fees go
-    /// CHECK: This is validated against game_state.treasury_wallet
-    #[account(
-        mut,
-        address = game_state.treasury_wallet
-    )]
+    /// CHECK: This is validated against game_state.treasury_wallet in code
+    #[account(mut)]
     pub treasury_wallet: AccountInfo<'info>,
 
     /// Treasury PDA where game pool funds are stored
     #[account(
         mut,
         seeds = [TREASURY_SEED],
-        bump = treasury_pda.bump
+        bump
     )]
-    pub treasury_pda: Account<'info, Treasury>,
+    pub treasury_pda: SystemAccount<'info>,
 
     /// System program
     pub system_program: Program<'info, System>,

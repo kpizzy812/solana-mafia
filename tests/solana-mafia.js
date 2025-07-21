@@ -21,7 +21,9 @@ describe("solana-mafia", () => {
   let playerPda, playerBump;
 
   before(async () => {
-    // Генерируем PDA с правильными seeds
+
+
+    // Генерируем PDA
     [gameStatePda, gameStateBump] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("game_state")],
       program.programId
