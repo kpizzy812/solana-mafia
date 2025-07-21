@@ -1,11 +1,9 @@
 // instructions/sell_business.rs
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke_signed;
 use anchor_lang::system_program;
 use crate::constants::*;
 use crate::state::*;
 use crate::error::*;
-// Убрал неиспользуемый импорт crate::utils::calculations::*
 
 pub fn handler(
     ctx: Context<SellBusiness>,
@@ -49,8 +47,8 @@ pub fn handler(
     ];
     let treasury_signer = &[&treasury_seeds[..]];
 
-    // Making transfer instruction using system_program instead of deprecated system_instruction
-    let transfer_ix = system_program::transfer(
+    // Making transfer using system_program::transfer with proper signer
+    system_program::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.system_program.to_account_info(),
             system_program::Transfer {

@@ -22,7 +22,7 @@ pub mod solana_mafia {
 
     /// 🔒 НОВОЕ: Создание игрока (отдельно от бизнеса)
     pub fn create_player(ctx: Context<CreatePlayer>) -> Result<()> {
-        instructions::create_player(ctx)
+        instructions::create_business::create_player(ctx)
     }
 
     /// 🔒 БЕЗОПАСНОЕ создание бизнеса (требует existing player)
