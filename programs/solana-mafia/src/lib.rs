@@ -6,7 +6,21 @@ pub mod instructions;
 pub mod state;
 pub mod utils;
 
-use instructions::*;
+// 🔧 ИСПРАВЛЕНО: Импортируем функции и контексты раздельно
+use instructions::{
+    initialize_handler, create_business_handler,
+    claim_earnings_handler, update_earnings_handler,
+    sell_business_handler, upgrade_business_handler
+};
+
+// Импорт контекстов
+use instructions::{
+    Initialize, CreatePlayer, CreateBusiness, ClaimEarnings,
+    UpdateEarnings, SellBusiness, UpgradeBusiness,
+    TogglePause, EmergencyPause, UpdateTreasuryFee,
+    UpdateBusinessRates, GetTreasuryStats
+};
+
 use state::*;
 
 declare_id!("Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU");
@@ -22,6 +36,7 @@ pub mod solana_mafia {
 
     /// 🔒 НОВОЕ: Создание игрока (отдельно от бизнеса)
     pub fn create_player(ctx: Context<CreatePlayer>) -> Result<()> {
+        // 🔧 ИСПРАВЛЕНО: Вызываем функцию из модуля, а не рекурсивно
         instructions::create_business::create_player(ctx)
     }
 
@@ -79,17 +94,17 @@ pub mod solana_mafia {
 
     /// Admin: Toggle game pause state
     pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {
-        instructions::toggle_pause(ctx)
+        instructions::admin::toggle_pause(ctx)
     }
 
     /// 🆘 EMERGENCY: Stop all financial operations
     pub fn emergency_pause(ctx: Context<EmergencyPause>) -> Result<()> {
-        instructions::emergency_pause(ctx)
+        instructions::admin::emergency_pause(ctx)
     }
 
     /// 🔓 EMERGENCY: Resume financial operations  
     pub fn emergency_unpause(ctx: Context<EmergencyPause>) -> Result<()> {
-        instructions::emergency_unpause(ctx)
+        instructions::admin::emergency_unpause(ctx)
     }
 
     /// Admin: Update business rates with safety checks
@@ -97,17 +112,17 @@ pub mod solana_mafia {
         ctx: Context<UpdateBusinessRates>, 
         new_rates: [u16; 6]
     ) -> Result<()> {
-        instructions::update_business_rates(ctx, new_rates)
+        instructions::admin::update_business_rates(ctx, new_rates)
     }
 
     /// Admin: Update treasury fee (with limits)
     pub fn update_treasury_fee(ctx: Context<UpdateTreasuryFee>, new_fee: u8) -> Result<()> {
-        instructions::update_treasury_fee(ctx, new_fee)
+        instructions::admin::update_treasury_fee(ctx, new_fee)
     }
 
     /// View: Get treasury statistics and health
     pub fn get_treasury_stats(ctx: Context<GetTreasuryStats>) -> Result<()> {
-        instructions::get_treasury_stats(ctx)
+        instructions::admin::get_treasury_stats(ctx)
     }
 
     /// 🔒 НОВОЕ: Health check для игрока
