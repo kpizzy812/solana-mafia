@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+// 🔧 ИСПРАВЛЕНО: Правильные импорты через crate::
 use crate::constants::*;
 use crate::state::*;
 
