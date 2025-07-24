@@ -8,7 +8,7 @@ pub mod utils;
 
 // 🔧 ИСПРАВЛЕНО: Импортируем функции и контексты раздельно
 use instructions::{
-    initialize_handler, create_business_handler,
+    initialize_handler, create_business_handler, create_player,
     claim_earnings_handler, update_earnings_handler,
     sell_business_handler, upgrade_business_handler
 };
@@ -36,8 +36,8 @@ pub mod solana_mafia {
 
     /// 🔒 НОВОЕ: Создание игрока (отдельно от бизнеса)
     pub fn create_player(ctx: Context<CreatePlayer>) -> Result<()> {
-        // 🔧 ИСПРАВЛЕНО: Вызываем функцию из модуля, а не рекурсивно
-        instructions::create_business::create_player(ctx)
+        // 🔧 ИСПРАВЛЕНО: Вызываем правильно импортированную функцию
+        create_player(ctx)
     }
 
     /// 🔒 БЕЗОПАСНОЕ создание бизнеса (требует existing player)

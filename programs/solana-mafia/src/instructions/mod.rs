@@ -11,8 +11,8 @@ pub mod add_referral_bonus;
 // 🔧 ИСПРАВЛЕНО: Экспортируем handler функции с уникальными именами
 pub use initialize::handler as initialize_handler;
 pub use create_business::handler as create_business_handler;
-// 🔧 ИСПРАВЛЕНО: create_player как отдельная функция, не handler
-// pub use create_business::create_player; // Убираем из основного экспорта
+// 🔧 ИСПРАВЛЕНО: Экспортируем create_player функцию
+pub use create_business::create_player;
 pub use claim_earnings::handler as claim_earnings_handler;
 pub use process_referral_bonus::handler as process_referral_bonus_handler;
 pub use update_earnings::handler as update_earnings_handler;
