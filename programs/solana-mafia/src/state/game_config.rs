@@ -1,7 +1,7 @@
 // state/game_config.rs
 use anchor_lang::prelude::*;
 use crate::constants::*;
-use crate::error::SolanaMafiaError; // ← ИСПРАВЛЕНО: прямой импорт
+use crate::error::SolanaMafiaError;
 
 #[account]
 pub struct GameConfig {

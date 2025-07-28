@@ -2,6 +2,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use super::*;
+use crate::error::SolanaMafiaError;
 
 /// 🔒 БЕЗОПАСНАЯ инструкция создания бизнеса (требует existing player)
 pub fn handler(

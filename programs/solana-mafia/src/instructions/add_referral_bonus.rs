@@ -1,6 +1,7 @@
 // instructions/add_referral_bonus.rs
 use anchor_lang::prelude::*;
 use super::*;
+use crate::error::SolanaMafiaError;
 
 /// Безопасная инструкция для добавления реферального бонуса
 /// Вызывается только админом или уполномоченным бэкендом

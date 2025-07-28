@@ -1,8 +1,8 @@
 // state/player.rs
 use anchor_lang::prelude::*;
 use crate::constants::*;
-use crate::state::business::Business;
-use crate::error::SolanaMafiaError; // ← ИСПРАВЛЕНО: прямой импорт
+use crate::error::SolanaMafiaError;
+use super::business::Business;
 
 #[account]
 pub struct Player {

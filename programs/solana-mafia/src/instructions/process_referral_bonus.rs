@@ -1,6 +1,7 @@
 // instructions/process_referral_bonus.rs
 use anchor_lang::prelude::*;
 use super::*;
+use crate::error::SolanaMafiaError;
 
 /// Simple instruction to add referral earnings to a player's balance
 /// Called from backend when referral bonus should be credited

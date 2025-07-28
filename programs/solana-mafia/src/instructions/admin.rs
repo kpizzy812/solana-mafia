@@ -1,6 +1,7 @@
 // instructions/admin.rs
 use anchor_lang::prelude::*;
 use super::*;
+use crate::error::SolanaMafiaError;
 
 /// Admin function to pause/unpause the game
 pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {

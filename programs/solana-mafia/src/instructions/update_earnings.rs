@@ -1,6 +1,7 @@
 // instructions/update_earnings.rs
 use anchor_lang::prelude::*;
 use super::*;
+use crate::error::SolanaMafiaError;
 
 /// 🔒 БЕЗОПАСНАЯ Crank instruction для обновления earnings
 /// Теперь только владелец может обновлять свои earnings!

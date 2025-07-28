@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::error::SolanaMafiaError;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
 pub enum BusinessType {

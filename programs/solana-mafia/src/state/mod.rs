@@ -9,6 +9,7 @@ pub use game_state::*;
 pub use player::*;
 
 use anchor_lang::prelude::*;
+pub use crate::error::*;
 
 /// Treasury PDA для хранения средств игроков (80% от депозитов)
 #[account]
