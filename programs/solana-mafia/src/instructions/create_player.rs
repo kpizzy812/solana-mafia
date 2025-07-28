@@ -1,7 +1,8 @@
 // instructions/create_player.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use super::*;
+use crate::constants::{PLAYER_SEED, GAME_CONFIG_SEED, GAME_STATE_SEED};
+use crate::state::{Player, GameConfig, GameState};
 use crate::error::SolanaMafiaError;
 
 /// 🔒 Создание нового игрока (отдельно от create_business)

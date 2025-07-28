@@ -1,6 +1,9 @@
+// programs/solana-mafia/src/instructions/initialize.rs
 use anchor_lang::prelude::*;
-use super::*;
-use crate::error::SolanaMafiaError;
+
+// 🔧 ИСПРАВЛЕНО: Конкретные импорты вместо super::*
+use crate::state::{GameState, GameConfig, Treasury};
+use crate::constants::{GAME_STATE_SEED, GAME_CONFIG_SEED, TREASURY_SEED, BUSINESS_TYPES_COUNT};
 
 pub fn handler(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> {
     let clock = Clock::get()?;

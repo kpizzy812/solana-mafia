@@ -1,7 +1,8 @@
 // instructions/upgrade_business.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use super::*;
+use crate::constants::{PLAYER_SEED, GAME_STATE_SEED, GAME_CONFIG_SEED, MAX_UPGRADE_LEVEL};
+use crate::state::{Player, GameState, GameConfig};
 use crate::error::SolanaMafiaError;
 
 pub fn handler(

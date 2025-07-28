@@ -1,6 +1,7 @@
 // instructions/admin.rs
 use anchor_lang::prelude::*;
-use super::*;
+use crate::constants::{GAME_STATE_SEED, GAME_CONFIG_SEED, TREASURY_SEED, BUSINESS_TYPES_COUNT};
+use crate::state::{GameState, GameConfig, Treasury};
 use crate::error::SolanaMafiaError;
 
 /// Admin function to pause/unpause the game

@@ -1,6 +1,7 @@
 // instructions/process_referral_bonus.rs
 use anchor_lang::prelude::*;
-use super::*;
+use crate::constants::{PLAYER_SEED, GAME_STATE_SEED};
+use crate::state::{Player, GameState};
 use crate::error::SolanaMafiaError;
 
 /// Simple instruction to add referral earnings to a player's balance

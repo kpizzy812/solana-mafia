@@ -1,7 +1,8 @@
 // instructions/sell_business.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use super::*;
+use crate::constants::{PLAYER_SEED, TREASURY_SEED, GAME_STATE_SEED, EARLY_SELL_FEES, FINAL_SELL_FEE_PERCENT};
+use crate::state::{Player, Treasury, GameState};
 use crate::error::SolanaMafiaError;
 
 pub fn handler(

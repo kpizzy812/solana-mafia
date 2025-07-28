@@ -1,6 +1,7 @@
 // instructions/update_earnings.rs
 use anchor_lang::prelude::*;
-use super::*;
+use crate::constants::{PLAYER_SEED, UPDATE_EARNINGS_COOLDOWN};
+use crate::state::Player;
 use crate::error::SolanaMafiaError;
 
 /// 🔒 БЕЗОПАСНАЯ Crank instruction для обновления earnings

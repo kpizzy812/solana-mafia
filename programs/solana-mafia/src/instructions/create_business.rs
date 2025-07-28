@@ -1,7 +1,8 @@
 // instructions/create_business.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use super::*;
+use crate::constants::{PLAYER_SEED, GAME_CONFIG_SEED, GAME_STATE_SEED, TREASURY_SEED, MAX_BUSINESSES_PER_PLAYER, BUSINESS_CREATE_COOLDOWN};
+use crate::state::{Player, GameState, GameConfig, Treasury, Business, BusinessType};
 use crate::error::SolanaMafiaError;
 
 /// 🔒 БЕЗОПАСНАЯ инструкция создания бизнеса (требует existing player)

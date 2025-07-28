@@ -1,3 +1,4 @@
+// programs/solana-mafia/src/state/mod.rs
 pub mod business;
 pub mod game_config;
 pub mod game_state;  
@@ -9,7 +10,6 @@ pub use game_state::*;
 pub use player::*;
 
 use anchor_lang::prelude::*;
-pub use crate::error::*;
 
 /// Treasury PDA для хранения средств игроков (80% от депозитов)
 #[account]
