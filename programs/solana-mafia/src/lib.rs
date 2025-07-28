@@ -6,18 +6,20 @@ pub mod instructions;
 pub mod state;
 pub mod utils;
 
-// Импортируем функции handlers
+// 🔧 ИСПРАВЛЕНО: Добавлены отсутствующие handlers
 use instructions::{
     initialize_handler, 
     create_player_handler,
     create_business_handler, 
     claim_earnings_handler, 
+    process_referral_bonus_handler,  // ← ДОБАВЛЕНО
     update_earnings_handler,
     sell_business_handler, 
-    upgrade_business_handler
+    upgrade_business_handler,
+    add_referral_bonus_handler       // ← ДОБАВЛЕНО
 };
 
-// Импорт контекстов
+// 🔧 ИСПРАВЛЕНО: Добавлены отсутствующие контексты
 use instructions::{
     Initialize, 
     CreatePlayer, 
@@ -26,6 +28,7 @@ use instructions::{
     UpdateEarnings, 
     SellBusiness, 
     UpgradeBusiness,
+    AddReferralBonus,    // ← ДОБАВЛЕНО
     TogglePause, 
     EmergencyPause, 
     UpdateTreasuryFee,
@@ -34,6 +37,7 @@ use instructions::{
 };
 
 use state::*;
+use constants::*;  // ← ДОБАВЛЕНО для использования PLAYER_SEED
 
 declare_id!("Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU");
 
@@ -96,6 +100,11 @@ pub mod solana_mafia {
         upgrade_business_handler(ctx, business_index)
     }
 
+    /// 🔧 ИСПРАВЛЕНО: Добавлена отсутствующая функция
+    pub fn add_referral_bonus(ctx: Context<AddReferralBonus>, amount: u64) -> Result<()> {
+        add_referral_bonus_handler(ctx, amount)
+    }
+
     // ===== ADMIN FUNCTIONS =====
 
     /// Admin: Toggle game pause state
@@ -146,7 +155,7 @@ pub mod solana_mafia {
 pub struct HealthCheckPlayer<'info> {
     /// Player to check
     #[account(
-        seeds = [b"player", player.owner.as_ref()],
+        seeds = [PLAYER_SEED, player.owner.as_ref()],  // ← ИСПРАВЛЕНО: использует константу
         bump = player.bump
     )]
     pub player: Account<'info, Player>,
