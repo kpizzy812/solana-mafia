@@ -1,8 +1,8 @@
 // state/player.rs
 use anchor_lang::prelude::*;
 use crate::constants::*;
+use crate::state::business::Business;
 use crate::error::SolanaMafiaError;
-use super::business::Business;
 
 #[account]
 pub struct Player {
@@ -77,7 +77,7 @@ impl Player {
         // 🔒 Защита от overflow
         self.total_invested = self.total_invested
             .checked_add(business.invested_amount)
-            .ok_or(SolanaMafiaError::MathOverflow)?;
+            .ok_or(ProgramError::ArithmeticOverflow)?;
         
         Ok(())
     }
