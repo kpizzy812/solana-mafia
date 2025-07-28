@@ -1,8 +1,6 @@
 // instructions/admin.rs
 use anchor_lang::prelude::*;
-use crate::constants::*;
-use crate::state::*;
-use crate::error::*;
+use super::*;
 
 /// Admin function to pause/unpause the game
 pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {

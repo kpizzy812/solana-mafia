@@ -9,6 +9,11 @@ pub mod sell_business;
 pub mod upgrade_business;
 pub mod add_referral_bonus;
 
+// 🔧 Реэкспортируем нужные модули для инструкций
+pub use super::constants::*;
+pub use super::state::*;
+pub use super::error::*;
+
 // Handler functions
 pub use initialize::handler as initialize_handler;
 pub use create_player::handler as create_player_handler;

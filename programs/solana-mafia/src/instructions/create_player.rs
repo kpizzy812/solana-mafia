@@ -1,9 +1,7 @@
 // instructions/create_player.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use crate::constants::*;
-use crate::state::*;
-use crate::error::*;
+use super::*;
 
 /// 🔒 Создание нового игрока (отдельно от create_business)
 pub fn handler(ctx: Context<CreatePlayer>) -> Result<()> {

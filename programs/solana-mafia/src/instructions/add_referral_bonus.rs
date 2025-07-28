@@ -1,7 +1,6 @@
 // instructions/add_referral_bonus.rs
 use anchor_lang::prelude::*;
-use crate::constants::*;
-use crate::state::*;
+use super::*;
 
 /// Безопасная инструкция для добавления реферального бонуса
 /// Вызывается только админом или уполномоченным бэкендом

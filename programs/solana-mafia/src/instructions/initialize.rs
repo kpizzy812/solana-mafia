@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
-// 🔧 ИСПРАВЛЕНО: Правильные импорты через crate::
-use crate::constants::*;
-use crate::state::*;
+// 🔧 ИСПРАВЛЕНО: Теперь используем super::* (mod.rs реэкспортирует все нужное)
+use super::*;
 
 pub fn handler(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> {
     let clock = Clock::get()?;

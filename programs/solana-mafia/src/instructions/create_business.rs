@@ -1,9 +1,7 @@
 // instructions/create_business.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use crate::constants::*;
-use crate::state::*;
-use crate::error::*;
+use super::*;
 
 /// 🔒 БЕЗОПАСНАЯ инструкция создания бизнеса (требует existing player)
 pub fn handler(

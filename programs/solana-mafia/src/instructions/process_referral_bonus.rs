@@ -1,7 +1,6 @@
 // instructions/process_referral_bonus.rs
 use anchor_lang::prelude::*;
-use crate::constants::*;
-use crate::state::*;
+use super::*;
 
 /// Simple instruction to add referral earnings to a player's balance
 /// Called from backend when referral bonus should be credited

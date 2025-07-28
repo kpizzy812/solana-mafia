@@ -1,9 +1,7 @@
 // instructions/claim_earnings.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use crate::constants::*;
-use crate::state::*;
-use crate::error::*;
+use super::*;
 
 pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
     let clock = Clock::get()?;

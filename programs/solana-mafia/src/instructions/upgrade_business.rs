@@ -1,9 +1,7 @@
 // instructions/upgrade_business.rs
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use crate::constants::*;
-use crate::state::*;
-use crate::error::*;
+use super::*;
 
 pub fn handler(
     ctx: Context<UpgradeBusiness>,
