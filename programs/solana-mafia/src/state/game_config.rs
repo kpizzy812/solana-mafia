@@ -1,6 +1,7 @@
 // state/game_config.rs
 use anchor_lang::prelude::*;
 use crate::constants::*;
+use crate::error::SolanaMafiaError; // ← ИСПРАВЛЕНО: прямой импорт
 
 #[account]
 pub struct GameConfig {
@@ -128,7 +129,7 @@ impl GameConfig {
     /// Update treasury fee (admin only, max 25%)
     pub fn update_treasury_fee(&mut self, new_fee: u8) -> Result<()> {
         if new_fee > 25 {
-            return Err(crate::error::SolanaMafiaError::InvalidFeePercentage.into());
+            return Err(SolanaMafiaError::InvalidFeePercentage.into());
         }
         self.treasury_fee_percent = new_fee;
         Ok(())

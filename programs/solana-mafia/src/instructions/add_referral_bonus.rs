@@ -14,12 +14,12 @@ pub fn handler(
     // Добавляем бонус к pending_referral_earnings игрока с защитой от overflow
     player.pending_referral_earnings = player.pending_referral_earnings
         .checked_add(amount)
-        .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+        .ok_or(SolanaMafiaError::MathOverflow)?;
     
     // Обновляем глобальную статистику с защитой от overflow
     game_state.total_referral_paid = game_state.total_referral_paid
         .checked_add(amount)
-        .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+        .ok_or(SolanaMafiaError::MathOverflow)?;
     
     msg!("Referral bonus added successfully!");
     msg!("Player: {}", player.owner);
@@ -33,7 +33,7 @@ pub fn handler(
 pub struct AddReferralBonus<'info> {
     /// Authority or backend signer - ТОЛЬКО ОНИ МОГУТ ДОБАВЛЯТЬ БОНУСЫ!
     #[account(
-        constraint = authority.key() == game_state.authority @ crate::error::SolanaMafiaError::UnauthorizedAdmin
+        constraint = authority.key() == game_state.authority @ SolanaMafiaError::UnauthorizedAdmin
     )]
     pub authority: Signer<'info>,
     

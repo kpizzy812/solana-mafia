@@ -2,6 +2,7 @@
 use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::state::business::Business;
+use crate::error::SolanaMafiaError; // ← ИСПРАВЛЕНО: прямой импорт
 
 #[account]
 pub struct Player {
@@ -64,7 +65,7 @@ impl Player {
     pub fn add_business(&mut self, business: Business) -> Result<()> {
         // Проверяем лимит
         if !self.can_create_business() {
-            return Err(crate::error::SolanaMafiaError::MaxBusinessesReached.into());
+            return Err(SolanaMafiaError::MaxBusinessesReached.into());
         }
         
         // Проверяем здоровье бизнеса
@@ -76,7 +77,7 @@ impl Player {
         // 🔒 Защита от overflow
         self.total_invested = self.total_invested
             .checked_add(business.invested_amount)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            .ok_or(SolanaMafiaError::MathOverflow)?;
         
         Ok(())
     }
@@ -93,7 +94,7 @@ impl Player {
                 // 🔒 Защита от overflow при суммировании
                 total_new_earnings = total_new_earnings
                     .checked_add(pending)
-                    .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+                    .ok_or(SolanaMafiaError::MathOverflow)?;
                     
                 // Обновляем last_claim безопасно
                 business.update_last_claim(current_time)?;
@@ -103,7 +104,7 @@ impl Player {
         // 🔒 Защита от overflow при добавлении к pending_earnings
         self.pending_earnings = self.pending_earnings
             .checked_add(total_new_earnings)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            .ok_or(SolanaMafiaError::MathOverflow)?;
             
         // 🔒 ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Лимит на pending_earnings
         let max_pending = 1000_000_000_000; // 1000 SOL максимум
@@ -119,19 +120,19 @@ impl Player {
     pub fn get_claimable_amount(&self) -> Result<u64> {
         self.pending_earnings
             .checked_add(self.pending_referral_earnings)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow.into())
+            .ok_or(SolanaMafiaError::MathOverflow.into())
     }
 
     /// 🔒 БЕЗОПАСНОЕ получение всех earnings
     pub fn claim_all_earnings(&mut self) -> Result<()> {
         let total_claimed = self.pending_earnings
             .checked_add(self.pending_referral_earnings)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            .ok_or(SolanaMafiaError::MathOverflow)?;
             
         // 🔒 Защита от overflow
         self.total_earned = self.total_earned
             .checked_add(total_claimed)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            .ok_or(SolanaMafiaError::MathOverflow)?;
             
         // 🔒 Проверяем разумность total_earned (не больше 10x от инвестиций)
         let max_reasonable_earned = self.total_invested
@@ -159,11 +160,11 @@ impl Player {
             
         let new_referral_total = self.pending_referral_earnings
             .checked_add(amount)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            .ok_or(SolanaMafiaError::MathOverflow)?;
             
         if new_referral_total > max_referral_total {
             msg!("⚠️ Реферальный лимит превышен: {} > {}", new_referral_total, max_referral_total);
-            return Err(crate::error::SolanaMafiaError::InvalidReferrer.into());
+            return Err(SolanaMafiaError::InvalidReferrer.into());
         }
         
         self.pending_referral_earnings = new_referral_total;
@@ -177,7 +178,7 @@ impl Player {
         // 🔒 Защита от overflow
         self.total_earned = self.total_earned
             .checked_add(amount)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            .ok_or(SolanaMafiaError::MathOverflow)?;
         Ok(())
     }
 
@@ -188,7 +189,7 @@ impl Player {
         // 🔒 Защита от overflow
         self.total_earned = self.total_earned
             .checked_add(amount)
-            .ok_or(crate::error::SolanaMafiaError::MathOverflow)?;
+            .ok_or(SolanaMafiaError::MathOverflow)?;
         Ok(())
     }
 
@@ -211,7 +212,7 @@ impl Player {
         
         // Проверяем количество бизнесов
         if self.businesses.len() > MAX_BUSINESSES_PER_PLAYER as usize {
-            return Err(crate::error::SolanaMafiaError::MaxBusinessesReached.into());
+            return Err(SolanaMafiaError::MaxBusinessesReached.into());
         }
         
         // Проверяем каждый бизнес
