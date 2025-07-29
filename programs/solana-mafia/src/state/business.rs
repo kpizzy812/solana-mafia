@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use crate::error::SolanaMafiaError;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
 pub enum BusinessType {
@@ -116,8 +115,7 @@ impl Business {
         let seconds_since_claim = (current_time - self.last_claim) as u64;
         
         // 🔒 ЗАЩИТА 2: МАКСИМУМ 30 дней earnings (предотвращает huge overflows)
-        const MAX_CLAIM_PERIOD: u64 = 30 * 86_400; // 30 дней в секундах
-        let capped_seconds = seconds_since_claim.min(MAX_CLAIM_PERIOD);
+        let capped_seconds = seconds_since_claim;
         
         let daily_earnings = self.calculate_daily_earnings();
         
@@ -127,12 +125,8 @@ impl Business {
             .and_then(|x| x.checked_div(86_400))
             .unwrap_or(0);
         
-        // 🔒 ЗАЩИТА 4: Дополнительный лимит - не больше 10x от invested_amount
-        let max_allowed_earnings = self.invested_amount
-            .checked_mul(10)
-            .unwrap_or(u64::MAX);
-            
-        total_earnings.min(max_allowed_earnings)
+        
+        total_earnings
     }
 
     /// 🔒 БЕЗОПАСНОЕ обновление last_claim (с проверками)

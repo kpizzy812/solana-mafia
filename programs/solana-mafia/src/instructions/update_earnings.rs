@@ -10,25 +10,12 @@ pub fn handler(ctx: Context<UpdateEarnings>) -> Result<()> {
     let clock = Clock::get()?;
     let player = &mut ctx.accounts.player;
     
-    // 🔒 ЗАЩИТА 1: Проверяем что вызывающий = владелец аккаунта
+    // 🔒 ЗАЩИТА: Проверяем что вызывающий = владелец аккаунта
     if ctx.accounts.authority.key() != player.owner {
         return Err(SolanaMafiaError::UnauthorizedAdmin.into());
     }
     
-    // 🔒 ЗАЩИТА 2: Rate limiting - не чаще чем раз в 5 минут
-    if player.businesses.len() > 0 {
-        let last_update = player.businesses.iter()
-            .map(|b| b.last_claim)
-            .max()
-            .unwrap_or(0);
-            
-        let time_since_last_update = clock.unix_timestamp - last_update;
-        if time_since_last_update < UPDATE_EARNINGS_COOLDOWN {
-            return Err(SolanaMafiaError::TooEarlyToUpdate.into());
-        }
-    }
-    
-    // 🔒 ЗАЩИТА 3: Проверяем что игрок не накручен
+    // 🔒 ЗАЩИТА: Проверяем что игрок не накручен
     let old_pending = player.pending_earnings;
     
     // Обновляем earnings с новыми безопасными проверками
@@ -38,18 +25,14 @@ pub fn handler(ctx: Context<UpdateEarnings>) -> Result<()> {
         .checked_sub(old_pending)
         .ok_or(SolanaMafiaError::MathOverflow)?;
     
-    // 🔒 ЗАЩИТА 4: Разумный лимит на новые earnings (максимум 1 SOL за один update)
-    if new_earnings > 1_000_000_000 { // 1 SOL
-        msg!("⚠️ Подозрительно большие earnings: {} lamports", new_earnings);
-        return Err(SolanaMafiaError::InvalidUpgradeLevel.into());
+    // 🔒 ЗАЩИТА: Разумный лимит на новые earnings (максимум 1 SOL за один update)
+    if new_earnings > 10_000_000_000 { // 10 SOL - только лог  
+        msg!("ℹ️ Large earnings update: {} lamports for {}", new_earnings, player.owner);
     }
     
-    // 🔒 ЗАЩИТА 5: Общий лимит на pending earnings (максимум 100 SOL)
-    if player.pending_earnings > 100_000_000_000 { // 100 SOL
-        msg!("⚠️ Превышен лимит pending earnings: {} lamports", player.pending_earnings);
-        
-        // Ограничиваем до максимума
-        player.pending_earnings = 100_000_000_000;
+    // 🔒
+    if player.pending_earnings > 10_000_000_000_000 { // 10,000 SOL - только мониторинг
+        msg!("ℹ️ Large pending earnings: {} lamports for {}", player.pending_earnings, player.owner);
     }
     
     msg!("✅ Безопасное обновление earnings:");

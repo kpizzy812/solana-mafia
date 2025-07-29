@@ -32,17 +32,7 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
         return Err(SolanaMafiaError::NoEarningsToClaim.into());
     }
 
-    // 🔒 НОВАЯ ЗАЩИТА 1: Проверяем что сумма не превышает разумные лимиты
-    let max_daily_claim = player.total_invested
-        .checked_mul(150) // Максимум 1.5% в день
-        .and_then(|x| x.checked_div(10000))
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-    
-    if claimable_amount > max_daily_claim {
-        return Err(SolanaMafiaError::InvalidUpgradeLevel.into()); // Переиспользуем error
-    }
-
-    // 🔒 НОВАЯ ЗАЩИТА 2: Улучшенная проверка баланса treasury
+    // Улучшенная проверка баланса treasury
     let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
     
     // Проверяем что в treasury достаточно средств + запас 10%
@@ -57,45 +47,10 @@ pub fn handler(ctx: Context<ClaimEarnings>) -> Result<()> {
         return Err(ProgramError::InsufficientFunds.into());
     }
 
-    // 🔒 НОВАЯ ЗАЩИТА 3: Проверяем общую экономику системы
-    let total_pending_system = game_state.total_invested
-        .checked_sub(game_state.total_withdrawn)
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-    
-    // Выплата не должна превышать 5% от общих pending в системе
-    let max_system_withdrawal = total_pending_system
-        .checked_div(20) // 5%
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-    
-    if claimable_amount > max_system_withdrawal {
-        msg!("⚠️ Выплата превышает лимиты системы!");
-        msg!("Запрошено: {}, максимум: {}", claimable_amount, max_system_withdrawal);
-        return Err(SolanaMafiaError::InvalidUpgradeLevel.into());
-    }
-
-    // 🔒 НОВАЯ ЗАЩИТА 4: Проверяем соотношение реферальных и обычных earnings
-    if player.pending_referral_earnings > 0 {
-        // Реферальные earnings не должны превышать 20% от обычных
-        let max_referral_allowed = player.pending_earnings
-            .checked_div(5) // 20%
-            .unwrap_or(0);
-        
-        if player.pending_referral_earnings > max_referral_allowed {
-            msg!("⚠️ Подозрительно высокие реферальные выплаты!");
-            msg!("Реферальные: {}, обычные: {}", player.pending_referral_earnings, player.pending_earnings);
-            
-            // Ограничиваем реферальные выплаты
-            let old_referral = player.pending_referral_earnings;
-            player.pending_referral_earnings = max_referral_allowed;
-            
-            msg!("Реферальные выплаты ограничены: {} -> {}", old_referral, max_referral_allowed);
-        }
-    }
-
-    // Пересчитываем claimable_amount после всех проверок и ограничений
+    // Пересчитываем claimable_amount после всех проверок
     let final_claimable_amount = player.get_claimable_amount()?;
 
-    // 🎯 БЕЗОПАСНЫЙ ПЕРЕВОД SOL из treasury_pda к игроку используя новый system_program
+    // 🎯 БЕЗОПАСНЫЙ ПЕРЕВОД SOL из treasury_pda к игроку используя system_program
     let treasury_seeds = &[
         TREASURY_SEED,
         &[ctx.accounts.treasury_pda.bump],

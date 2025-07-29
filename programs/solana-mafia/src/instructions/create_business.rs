@@ -53,16 +53,6 @@ pub fn handler(
         return Err(SolanaMafiaError::MaxBusinessesReached.into());
     }
 
-    // 🔒 ЗАЩИТА 4: Лимит на общие инвестиции игрока (максимум 1000 SOL)
-    let max_total_investment = 1000_000_000_000; // 1000 SOL
-    let new_total_invested = player.total_invested
-        .checked_add(deposit_amount)
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-        
-    if new_total_invested > max_total_investment {
-        return Err(SolanaMafiaError::InsufficientDeposit.into());
-    }
-
     // Calculate treasury fee (20% of deposit goes to team)
     let treasury_fee = deposit_amount
         .checked_mul(game_config.treasury_fee_percent as u64)

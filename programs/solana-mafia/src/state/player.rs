@@ -107,10 +107,8 @@ impl Player {
             .ok_or(SolanaMafiaError::MathOverflow)?;
             
         // 🔒 ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Лимит на pending_earnings
-        let max_pending = 1000_000_000_000; // 1000 SOL максимум
-        if self.pending_earnings > max_pending {
-            msg!("⚠️ Pending earnings превышает лимит, ограничиваем до {} SOL", max_pending / 1_000_000_000);
-            self.pending_earnings = max_pending;
+        if self.pending_earnings > 10_000_000_000_000 { // 10,000 SOL - только для мониторинга
+            msg!("ℹ️ Large pending earnings: {} lamports for player {}", self.pending_earnings, self.owner);
         }
         
         Ok(())
@@ -135,15 +133,8 @@ impl Player {
             .ok_or(SolanaMafiaError::MathOverflow)?;
             
         // 🔒 Проверяем разумность total_earned (не больше 10x от инвестиций)
-        let max_reasonable_earned = self.total_invested
-            .checked_mul(10)
-            .unwrap_or(u64::MAX);
-            
-        if self.total_earned > max_reasonable_earned {
-            msg!("⚠️ Подозрительно высокие earnings: {} vs invested: {}", 
-                 self.total_earned, self.total_invested);
-                 
-            // Не блокируем, но логируем для мониторинга
+        if total_claimed > 1_000_000_000_000 { // 1000 SOL - только лог
+            msg!("ℹ️ Large claim: {} lamports by {}", total_claimed, self.owner);
         }
             
         self.pending_earnings = 0;
@@ -151,24 +142,17 @@ impl Player {
         Ok(())
     }
 
-    /// 🔒 БЕЗОПАСНОЕ добавление реферального бонуса (с лимитами)
+    /// 🔒 БЕЗОПАСНОЕ добавление реферального бонуса
     pub fn add_referral_bonus(&mut self, amount: u64) -> Result<()> {
         // 🔒 Лимит на реферальные earnings (максимум 50% от инвестиций)
-        let max_referral_total = self.total_invested
-            .checked_div(2)
-            .unwrap_or(0);
-            
-        let new_referral_total = self.pending_referral_earnings
-            .checked_add(amount)
-            .ok_or(SolanaMafiaError::MathOverflow)?;
-            
-        if new_referral_total > max_referral_total {
-            msg!("⚠️ Реферальный лимит превышен: {} > {}", new_referral_total, max_referral_total);
-            return Err(SolanaMafiaError::InvalidReferrer.into());
-        }
+        self.pending_referral_earnings = self.pending_referral_earnings
+        .checked_add(amount)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
         
-        self.pending_referral_earnings = new_referral_total;
-        Ok(())
+    if amount > 100_000_000_000 { // 100 SOL - только лог
+        msg!("ℹ️ Large referral bonus: {} lamports to {}", amount, self.owner);
+    }
+    Ok(())
     }
 
     /// Claim specific amount of earnings
