@@ -20,6 +20,7 @@ pub mod solana_mafia {
     pub fn initialize(ctx: Context<Initialize>, treasury_wallet: Pubkey) -> Result<()> {
         let game_state = &mut ctx.accounts.game_state;
         let game_config = &mut ctx.accounts.game_config;
+        let treasury_pda = &mut ctx.accounts.treasury_pda;
         let clock = Clock::get()?;
         
         // Initialize GameState (БЕЗ is_paused!)
