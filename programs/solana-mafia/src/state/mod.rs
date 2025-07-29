@@ -8,6 +8,7 @@ pub use business::*;
 pub use game_config::*;
 pub use game_state::*;
 pub use player::*;
+pub use treasury::Treasury;
 
 use anchor_lang::prelude::*;
 

@@ -251,6 +251,141 @@ pub mod solana_mafia {
         msg!("✅ Player health check passed");
         Ok(())
     }
+    /// Sell business with early exit fees
+pub fn sell_business(
+    ctx: Context<SellBusiness>,
+    business_index: u8,
+) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let game_state = &mut ctx.accounts.game_state;
+    let clock = Clock::get()?;
+    
+    // Get business
+    if business_index as usize >= player.businesses.len() {
+        return Err(SolanaMafiaError::BusinessNotFound.into());
+    }
+    
+    let business = &mut player.businesses[business_index as usize];
+    
+    if !business.is_active {
+        return Err(SolanaMafiaError::BusinessNotFound.into());
+    }
+    
+    // Calculate days held
+    let days_held = business.days_since_created(clock.unix_timestamp);
+    
+    // Calculate early sell fee using constants
+    let sell_fee_percent = match days_held {
+        0..=7 => 25,
+        8..=14 => 20,
+        15..=21 => 15,
+        22..=28 => 10,
+        29..=30 => 5,
+        _ => 0,
+    };
+    
+    let sell_fee = business.invested_amount * sell_fee_percent / 100;
+    let return_amount = business.invested_amount - sell_fee;
+    
+    // Check if treasury has enough funds
+    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
+    if treasury_balance < return_amount {
+        return Err(ProgramError::InsufficientFunds.into());
+    }
+    
+    // Transfer return amount to player
+    **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
+    **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
+    
+    // Deactivate business
+    business.is_active = false;
+    
+    // Update statistics
+    game_state.add_withdrawal(return_amount);
+    
+    msg!("🔥 Business sold! Days held: {}, Fee: {}%, Return: {} lamports", 
+         days_held, sell_fee_percent, return_amount);
+    
+    Ok(())
+}
+
+/// Add referral bonus (admin only)
+pub fn add_referral_bonus(ctx: Context<AddReferralBonus>, amount: u64) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let game_state = &mut ctx.accounts.game_state;
+    
+    // Add bonus to pending_referral_earnings with overflow protection
+    player.pending_referral_earnings = player.pending_referral_earnings
+        .checked_add(amount)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    // Update global statistics
+    game_state.total_referral_paid = game_state.total_referral_paid
+        .checked_add(amount)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    msg!("🎁 Referral bonus added: {} lamports", amount);
+    Ok(())
+}
+
+/// Admin: Toggle game pause state
+pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {
+    let game_state = &mut ctx.accounts.game_state;
+    
+    // Only authority can pause
+    if ctx.accounts.authority.key() != game_state.authority {
+        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+    }
+    
+    game_state.is_paused = !game_state.is_paused;
+    
+    msg!("⏸️ Game pause toggled. New state: {}", game_state.is_paused);
+    
+    Ok(())
+}
+
+/// Emergency: Stop all financial operations
+pub fn emergency_pause(ctx: Context<EmergencyPause>) -> Result<()> {
+    let game_state = &mut ctx.accounts.game_state;
+    
+    // Only authority can activate emergency
+    if ctx.accounts.authority.key() != game_state.authority {
+        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+    }
+    
+    game_state.is_paused = true;
+    
+    msg!("🆘 EMERGENCY PAUSE ACTIVATED!");
+    msg!("All financial operations are now disabled.");
+    
+    Ok(())
+}
+
+/// View: Get treasury statistics
+pub fn get_treasury_stats(ctx: Context<GetTreasuryStats>) -> Result<()> {
+    let game_state = &ctx.accounts.game_state;
+    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
+    
+    msg!("📊 TREASURY STATISTICS:");
+    msg!("Treasury balance: {} lamports", treasury_balance);
+    msg!("Total invested: {} lamports", game_state.total_invested);
+    msg!("Total withdrawn: {} lamports", game_state.total_withdrawn);
+    msg!("Total players: {}", game_state.total_players);
+    msg!("Game paused: {}", game_state.is_paused);
+    
+    let pending_in_system = game_state.total_invested
+        .checked_sub(game_state.total_withdrawn)
+        .unwrap_or(0);
+    msg!("Pending in system: {} lamports", pending_in_system);
+    
+    if treasury_balance < pending_in_system {
+        msg!("⚠️ WARNING: Treasury balance less than pending obligations!");
+    } else {
+        msg!("✅ Treasury health: OK");
+    }
+    
+    Ok(())
+}
 }
 
 // ===== ACCOUNT CONTEXTS =====
@@ -453,4 +588,98 @@ pub struct HealthCheckPlayer<'info> {
         bump = player.bump
     )]
     pub player: Account<'info, Player>,
+}
+
+#[derive(Accounts)]
+pub struct SellBusiness<'info> {
+    #[account(mut)]
+    pub player_owner: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == player_owner.key()
+    )]
+    pub player: Account<'info, Player>,
+    
+    #[account(
+        mut,
+        seeds = [TREASURY_SEED],
+        bump = treasury_pda.bump
+    )]
+    pub treasury_pda: Account<'info, Treasury>,
+    
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AddReferralBonus<'info> {
+    /// Authority (admin) - ТОЛЬКО ОНИ МОГУТ ДОБАВЛЯТЬ БОНУСЫ!
+    #[account(
+        constraint = authority.key() == game_state.authority @ SolanaMafiaError::UnauthorizedAdmin
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, player.owner.as_ref()],
+        bump = player.bump
+    )]
+    pub player: Account<'info, Player>,
+    
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct TogglePause<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct EmergencyPause<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct GetTreasuryStats<'info> {
+    #[account(
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+    
+    #[account(
+        seeds = [TREASURY_SEED],
+        bump = treasury_pda.bump
+    )]
+    pub treasury_pda: Account<'info, Treasury>,
 }
