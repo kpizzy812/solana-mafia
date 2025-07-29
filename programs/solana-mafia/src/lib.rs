@@ -22,7 +22,7 @@ pub mod solana_mafia {
         let clock = Clock::get()?;
         
         // Initialize GameState
-        *game_state = GameState::new(
+        **game_state = GameState::new(
             ctx.accounts.authority.key(),
             treasury_wallet,
             clock.unix_timestamp,
@@ -30,7 +30,7 @@ pub mod solana_mafia {
         );
         
         // Initialize GameConfig
-        *game_config = GameConfig::new(
+        **game_config = GameConfig::new(
             ctx.accounts.authority.key(),
             ctx.bumps.game_config,
         );
@@ -61,7 +61,7 @@ pub mod solana_mafia {
         **ctx.accounts.owner.to_account_info().try_borrow_mut_lamports()? -= entry_fee;
         
         // Initialize player
-        *player = Player::new(
+        **player = Player::new(
             ctx.accounts.owner.key(),
             None, // No referrer for now
             clock.unix_timestamp,
