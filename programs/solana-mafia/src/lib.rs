@@ -35,6 +35,8 @@ pub mod solana_mafia {
             ctx.accounts.authority.key(),
             ctx.bumps.game_config,
         );
+
+        **treasury_pda = Treasury::new(ctx.bumps.treasury_pda);
         
         msg!("🎮 Solana Mafia initialized!");
         msg!("Authority: {}", ctx.accounts.authority.key());
