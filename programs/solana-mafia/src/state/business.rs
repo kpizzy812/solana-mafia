@@ -171,4 +171,14 @@ impl Business {
         
         Ok(())
     }
+    /// 🆕 Расчет earnings за конкретный период времени
+    pub fn calculate_earnings_for_period(&self, seconds: i64) -> u64 {
+        if !self.is_active || seconds <= 0 {
+            return 0;
+        }
+        
+        let daily_earnings = self.calculate_daily_earnings();
+        let seconds_earnings = daily_earnings as u128 / 86_400;
+        (seconds_earnings * seconds as u128).min(u64::MAX as u128) as u64
+    }
 }

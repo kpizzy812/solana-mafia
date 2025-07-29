@@ -10,6 +10,83 @@ use state::*;
 use constants::*;
 use error::SolanaMafiaError;
 
+// ============ EVENTS ============
+#[event]
+pub struct PlayerCreated {
+    pub wallet: Pubkey,
+    pub entry_fee: u64,
+    pub created_at: i64,
+    pub next_earnings_time: i64,
+}
+
+#[event]
+pub struct BusinessCreated {
+    pub player: Pubkey,
+    pub business_type: u8,
+    pub invested_amount: u64,
+    pub daily_rate: u16,
+    pub treasury_fee: u64,
+    pub created_at: i64,
+}
+
+#[event]
+pub struct EarningsUpdated {
+    pub player: Pubkey,
+    pub earnings_added: u64,
+    pub total_pending: u64,
+    pub next_earnings_time: i64,
+    pub businesses_count: u8,
+}
+
+#[event]
+pub struct EarningsClaimed {
+    pub player: Pubkey,
+    pub amount: u64,
+    pub claimed_at: i64,
+}
+
+#[event]
+pub struct BusinessUpgraded {
+    pub player: Pubkey,
+    pub business_index: u8,
+    pub new_level: u8,
+    pub upgrade_cost: u64,
+    pub new_daily_rate: u16,
+}
+
+#[event]
+pub struct BusinessSold {
+    pub player: Pubkey,
+    pub business_index: u8,
+    pub days_held: u64,
+    pub sell_fee_percent: u8,
+    pub return_amount: u64,
+}
+
+// ============ FRONTEND DATA STRUCTURES ============
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PlayerFrontendData {
+    pub wallet: Pubkey,
+    pub total_invested: u64,
+    pub pending_earnings: u64,
+    pub estimated_pending_earnings: u64,
+    pub businesses_count: u8,
+    pub next_earnings_time: i64,
+    pub time_to_next_earnings: i64,
+    pub active_businesses: u8,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct GlobalStats {
+    pub total_players: u64,
+    pub total_invested: u64,
+    pub total_withdrawn: u64,
+    pub total_businesses: u64,
+    pub total_treasury_collected: u64,
+}
+
 declare_id!("Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU");
 
 #[program]
@@ -90,6 +167,13 @@ pub mod solana_mafia {
             .ok_or(SolanaMafiaError::MathOverflow)?;
         
         msg!("👤 Player created! Entry fee: {} lamports", entry_fee);
+        // 🆕 Эмиттим event
+    emit!(PlayerCreated {
+        wallet: ctx.accounts.owner.key(),
+        entry_fee,
+        created_at: clock.unix_timestamp,
+        next_earnings_time: 0, // Будет установлено при первом бизнесе
+    });
         Ok(())
     }
 
@@ -174,6 +258,22 @@ pub mod solana_mafia {
         game_state.add_treasury_collection(treasury_fee);
         game_state.add_business();
         
+        // 🆕 Устанавливаем расписание начислений для первого бизнеса
+        if player.businesses.len() == 1 {
+            let player_seed = ctx.accounts.owner.key().to_bytes()[0] as u64;
+            player.set_earnings_schedule(clock.unix_timestamp, player_seed)?;
+        }
+
+        // 🆕 Эмиттим event
+        emit!(BusinessCreated {
+            player: ctx.accounts.owner.key(),
+            business_type,
+            invested_amount: deposit_amount,
+            daily_rate,
+            treasury_fee,
+            created_at: clock.unix_timestamp,
+        });
+
         msg!("🏪 Business created! Type: {}, Investment: {} lamports", business_type, deposit_amount);
         Ok(())
     }
@@ -222,6 +322,13 @@ pub mod solana_mafia {
         
         // Update game statistics
         game_state.add_withdrawal(claimable_amount);
+
+        // 🆕 Эмиттим event
+        emit!(EarningsClaimed {
+            player: ctx.accounts.player_owner.key(),
+            amount: claimable_amount,
+            claimed_at: clock.unix_timestamp,
+        });
         
         msg!("💰 Claimed {} lamports", claimable_amount);
         Ok(())
@@ -276,6 +383,15 @@ pub mod solana_mafia {
         game_state.total_treasury_collected = game_state.total_treasury_collected
             .checked_add(upgrade_cost)
             .ok_or(SolanaMafiaError::MathOverflow)?;
+
+        // 🆕 Эмиттим event
+        emit!(BusinessUpgraded {
+            player: ctx.accounts.player_owner.key(),
+            business_index,
+            new_level: next_level,
+            upgrade_cost,
+            new_daily_rate: business.daily_rate,
+        });
         
         msg!("⬆️ Business upgraded to level {}", next_level);
         msg!("Cost: {} lamports, New rate: {} bp", upgrade_cost, business.daily_rate);
@@ -372,10 +488,107 @@ pub mod solana_mafia {
         Ok(())
     }
 
-    // ❌ УДАЛИЛИ ВСЕ АДМИНСКИЕ ФУНКЦИИ ПАУЗЫ:
-    // - toggle_pause
-    // - emergency_pause  
-    // - get_treasury_stats
+/// 🆕 Обновление earnings для одного игрока (для backend batch processing)
+pub fn update_single_player_earnings(ctx: Context<UpdateSinglePlayerEarnings>) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let clock = Clock::get()?;
+    let current_time = clock.unix_timestamp;
+    
+    // Проверяем нужно ли обновление
+    if !player.is_earnings_due(current_time) {
+        msg!("⏰ Earnings not due yet for player: {}", player.owner);
+        return Ok(());
+    }
+    
+    // Выполняем автообновление
+    let earnings_added = player.auto_update_earnings(current_time)?;
+    
+    if earnings_added > 0 {
+        // Эмиттим event
+        emit!(EarningsUpdated {
+            player: player.owner,
+            earnings_added,
+            total_pending: player.pending_earnings,
+            next_earnings_time: player.next_earnings_time,
+            businesses_count: player.businesses.len() as u8,
+        });
+        
+        msg!("💰 Earnings updated: {} lamports added, next update: {}", 
+             earnings_added, player.next_earnings_time);
+    }
+    
+    Ok(())
+}
+
+/// 🆕 Проверить нужно ли обновление earnings игроку
+pub fn check_earnings_due(ctx: Context<CheckEarningsDue>) -> Result<()> {
+    let player = &ctx.accounts.player;
+    let clock = Clock::get()?;
+    let current_time = clock.unix_timestamp;
+    
+    let is_due = player.is_earnings_due(current_time);
+    let time_to_next = if player.next_earnings_time > current_time {
+        player.next_earnings_time - current_time
+    } else {
+        0
+    };
+    
+    // Логируем результат (backend может парсить)
+    msg!("EARNINGS_CHECK: wallet={}, due={}, time_to_next={}, next_earnings_time={}", 
+         player.owner, is_due, time_to_next, player.next_earnings_time);
+    
+    Ok(())
+}
+
+/// 🆕 Получить список всех игроков с их статусом обновления (view функция)
+pub fn batch_check_players_status(ctx: Context<BatchCheckPlayersStatus>) -> Result<()> {
+    let clock = Clock::get()?;
+    let current_time = clock.unix_timestamp;
+    
+    msg!("📊 BATCH_CHECK started at: {}", current_time);
+    
+    // Backend может использовать getProgramAccounts для получения всех Player аккаунтов
+    // и эта функция поможет логировать статус каждого
+    
+    Ok(())
+}
+
+/// 🆕 Получить данные игрока для фронтенда
+pub fn get_player_data(ctx: Context<GetPlayerData>) -> Result<()> {
+    let player = &ctx.accounts.player;
+    let clock = Clock::get()?;
+    
+    let frontend_data = player.get_frontend_data(clock.unix_timestamp);
+    
+    // Логируем основные данные
+    msg!("PLAYER_DATA: wallet={}, invested={}, pending={}, businesses={}, next_earnings={}", 
+         frontend_data.wallet,
+         frontend_data.total_invested,
+         frontend_data.pending_earnings,
+         frontend_data.businesses_count,
+         frontend_data.next_earnings_time
+    );
+    
+    Ok(())
+}
+
+/// 🆕 Получить глобальную статистику
+pub fn get_global_stats(ctx: Context<GetGlobalStats>) -> Result<()> {
+    let game_state = &ctx.accounts.game_state;
+    
+    // Логируем статистику
+    msg!("GLOBAL_STATS: players={}, invested={}, withdrawn={}, businesses={}, treasury={}", 
+         game_state.total_players,
+         game_state.total_invested,
+         game_state.total_withdrawn,
+         game_state.total_businesses,
+         game_state.total_treasury_collected
+    );
+    
+    Ok(())
+}
+
+
 }
 
 // ===== ACCOUNT CONTEXTS =====
@@ -627,6 +840,85 @@ pub struct AddReferralBonus<'info> {
     
     #[account(
         mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct BatchUpdateEarnings<'info> {
+    /// Authority (только admin может запускать batch update)
+    #[account(
+        constraint = authority.key() == game_state.authority @ SolanaMafiaError::UnauthorizedAdmin
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct GetPlayerData<'info> {
+    #[account(
+        seeds = [PLAYER_SEED, player.owner.as_ref()],
+        bump = player.bump
+    )]
+    pub player: Account<'info, Player>,
+}
+
+#[derive(Accounts)]
+pub struct GetGlobalStats<'info> {
+    #[account(
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateSinglePlayerEarnings<'info> {
+    /// Authority (только admin может запускать updates)
+    #[account(
+        constraint = authority.key() == game_state.authority @ SolanaMafiaError::UnauthorizedAdmin
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, player.owner.as_ref()],
+        bump = player.bump
+    )]
+    pub player: Account<'info, Player>,
+    
+    #[account(
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct CheckEarningsDue<'info> {
+    #[account(
+        seeds = [PLAYER_SEED, player.owner.as_ref()],
+        bump = player.bump
+    )]
+    pub player: Account<'info, Player>,
+}
+
+#[derive(Accounts)]
+pub struct BatchCheckPlayersStatus<'info> {
+    /// Authority для batch операций
+    #[account(
+        constraint = authority.key() == game_state.authority @ SolanaMafiaError::UnauthorizedAdmin
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
         seeds = [GAME_STATE_SEED],
         bump = game_state.bump
     )]

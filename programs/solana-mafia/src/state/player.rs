@@ -3,6 +3,7 @@ use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::state::business::Business;
 use crate::error::SolanaMafiaError;
+use crate::{PlayerFrontendData};
 
 #[account]
 pub struct Player {
@@ -14,22 +15,30 @@ pub struct Player {
     pub pending_referral_earnings: u64,
     pub has_paid_entry: bool,
     pub created_at: i64,
+    pub next_earnings_time: i64,        // Время следующего начисления
+    pub earnings_interval: i64,         // Интервал начислений (86400 сек)
+    pub first_business_time: i64,       // Время первого бизнеса
+    pub last_auto_update: i64,          // Последнее автообновление
     pub bump: u8,
 }
 
 impl Player {
     /// 🔒 ИСПРАВЛЕННЫЙ размер аккаунта - с БОЛЬШИМ запасом для безопасности
     pub const SIZE: usize = 8 + // discriminator
-        32 + // owner
-        4 + (Business::SIZE * MAX_BUSINESSES_PER_PLAYER as usize) + // businesses Vec
-        8 + // total_invested
-        8 + // total_earned
-        8 + // pending_earnings
-        8 + // pending_referral_earnings
-        1 + // has_paid_entry
-        8 + // created_at
-        1 + // bump
-        1000; // 🔒 БОЛЬШОЙ ЗАПАС для Anchor overhead и будущих полей
+    32 + // owner
+    4 + (Business::SIZE * MAX_BUSINESSES_PER_PLAYER as usize) + // businesses Vec
+    8 + // total_invested
+    8 + // total_earned
+    8 + // pending_earnings
+    8 + // pending_referral_earnings
+    1 + // has_paid_entry
+    8 + // created_at
+    8 + // next_earnings_time
+    8 + // earnings_interval
+    8 + // first_business_time
+    8 + // last_auto_update
+    1 + // bump
+    1000; // 🔒 БОЛЬШОЙ ЗАПАС
 
     /// Create new player
     pub fn new(owner: Pubkey, _referrer: Option<Pubkey>, current_time: i64, bump: u8) -> Self {
@@ -42,6 +51,10 @@ impl Player {
             pending_referral_earnings: 0,
             has_paid_entry: false,
             created_at: current_time,
+            next_earnings_time: 0,  // Будет установлено при первом бизнесе
+            earnings_interval: 86_400, // 24 часа
+            first_business_time: 0,
+            last_auto_update: current_time,
             bump,
         }
     }
@@ -205,6 +218,94 @@ impl Player {
         }
         
         Ok(())
+    }
+
+    /// 🆕 Устанавливает уникальное время начислений при первом бизнесе
+    pub fn set_earnings_schedule(&mut self, first_business_time: i64, player_seed: u64) -> Result<()> {
+        if self.first_business_time == 0 {
+            self.first_business_time = first_business_time;
+            
+            // Создаем уникальный offset для каждого игрока (0-86399 секунд)
+            let offset = (player_seed % 86400) as i64;
+            self.next_earnings_time = first_business_time + 86400 + offset;
+            
+            msg!("📅 Earnings schedule set: next at {}", self.next_earnings_time);
+        }
+        Ok(())
+    }
+
+    /// 🆕 Проверяет, пора ли автоматически начислять earnings
+    pub fn is_earnings_due(&self, current_time: i64) -> bool {
+        current_time >= self.next_earnings_time && self.businesses.len() > 0
+    }
+
+    /// 🆕 Автоматическое начисление earnings (для batch операций)
+    pub fn auto_update_earnings(&mut self, current_time: i64) -> Result<u64> {
+        if !self.is_earnings_due(current_time) {
+            return Ok(0);
+        }
+        
+        let _earnings_before = self.pending_earnings;
+        
+        // Рассчитываем earnings от последнего обновления
+        let time_diff = current_time - self.last_auto_update;
+        let mut total_new_earnings = 0u64;
+        
+        for business in &mut self.businesses {
+            if business.is_active {
+                let business_earnings = business.calculate_earnings_for_period(time_diff);
+                total_new_earnings = total_new_earnings
+                    .checked_add(business_earnings)
+                    .ok_or(SolanaMafiaError::MathOverflow)?;
+            }
+        }
+        
+        // Добавляем к pending earnings
+        self.pending_earnings = self.pending_earnings
+            .checked_add(total_new_earnings)
+            .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+        // Обновляем времена
+        self.last_auto_update = current_time;
+        self.next_earnings_time += self.earnings_interval;
+        
+        Ok(total_new_earnings)
+    }
+
+    /// 🆕 Получить данные для фронтенда
+    pub fn get_frontend_data(&self, current_time: i64) -> PlayerFrontendData {
+        let estimated_pending = self.calculate_estimated_pending(current_time);
+        let time_to_next_earnings = if self.next_earnings_time > current_time {
+            self.next_earnings_time - current_time
+        } else {
+            0
+        };
+        
+        PlayerFrontendData {
+            wallet: self.owner,
+            total_invested: self.total_invested,
+            pending_earnings: self.pending_earnings,
+            estimated_pending_earnings: estimated_pending,
+            businesses_count: self.businesses.len() as u8,
+            next_earnings_time: self.next_earnings_time,
+            time_to_next_earnings,
+            active_businesses: self.businesses.iter().filter(|b| b.is_active).count() as u8,
+        }
+    }
+
+    /// 🆕 Расчет примерных pending earnings (для UI)
+    pub fn calculate_estimated_pending(&self, current_time: i64) -> u64 {
+        let mut estimated = self.pending_earnings;
+        
+        for business in &self.businesses {
+            if business.is_active {
+                let time_diff = current_time - self.last_auto_update;
+                let business_earnings = business.calculate_earnings_for_period(time_diff);
+                estimated = estimated.saturating_add(business_earnings);
+            }
+        }
+        
+        estimated
     }
 }
 
