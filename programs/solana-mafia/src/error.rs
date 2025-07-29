@@ -70,4 +70,7 @@ pub enum SolanaMafiaError {
     
     #[msg("Only emergency admin can use this function")]
     UnauthorizedEmergencyAdmin,
+
+    #[msg("Player already exists")]
+    PlayerAlreadyExists,
 }

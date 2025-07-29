@@ -63,6 +63,15 @@ pub struct BusinessSold {
     pub return_amount: u64,
 }
 
+#[event]
+pub struct ReferralBonusAdded {
+    pub referrer: Pubkey,
+    pub referred_player: Pubkey,
+    pub amount: u64,
+    pub level: u8, // 1, 2 или 3
+    pub timestamp: i64,
+}
+
 // ============ FRONTEND DATA STRUCTURES ============
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -124,7 +133,7 @@ pub mod solana_mafia {
     }
 
     /// Create new player (with entry fee)
-    pub fn create_player(ctx: Context<CreatePlayer>) -> Result<()> {
+    pub fn create_player(ctx: Context<CreatePlayer>, referrer: Option<Pubkey>) -> Result<()> {
         let game_config = &ctx.accounts.game_config;
         let game_state = &mut ctx.accounts.game_state;
         let player = &mut ctx.accounts.player;
@@ -150,11 +159,16 @@ pub mod solana_mafia {
             ),
             entry_fee,
         )?;
+
+        // 🔒 ПРОВЕРКА: Player уже существует?
+        if player.owner != Pubkey::default() {
+            return Err(SolanaMafiaError::PlayerAlreadyExists.into());
+        }
         
         // Initialize player
         **player = Player::new(
             ctx.accounts.owner.key(),
-            None, // No referrer for now
+            referrer,
             clock.unix_timestamp,
             ctx.bumps.player,
         );
@@ -462,6 +476,15 @@ pub mod solana_mafia {
         
         // Update statistics
         game_state.add_withdrawal(return_amount);
+
+        // 🆕 Эмиттим event
+        emit!(BusinessSold {
+            player: ctx.accounts.player_owner.key(),
+            business_index,
+            days_held,
+            sell_fee_percent: sell_fee_percent as u8,
+            return_amount,
+        });
         
         msg!("🔥 Business sold! Days held: {}, Fee: {}%, Return: {} lamports", 
              days_held, sell_fee_percent, return_amount);
@@ -470,9 +493,15 @@ pub mod solana_mafia {
     }
 
     /// ✅ ОСТАВЛЯЕМ: Add referral bonus (admin only) - НУЖНА ДЛЯ РЕФЕРАЛЬНОЙ СИСТЕМЫ
-    pub fn add_referral_bonus(ctx: Context<AddReferralBonus>, amount: u64) -> Result<()> {
+    pub fn add_referral_bonus(
+        ctx: Context<AddReferralBonus>, 
+        amount: u64,
+        referred_player: Pubkey,
+        level: u8
+    ) -> Result<()> {
         let player = &mut ctx.accounts.player;
         let game_state = &mut ctx.accounts.game_state;
+        let clock = Clock::get()?;
         
         // Add bonus to pending_referral_earnings with overflow protection
         player.pending_referral_earnings = player.pending_referral_earnings
@@ -484,7 +513,16 @@ pub mod solana_mafia {
             .checked_add(amount)
             .ok_or(SolanaMafiaError::MathOverflow)?;
         
-        msg!("🎁 Referral bonus added: {} lamports", amount);
+        // 🆕 Эмиттим event для трекинга
+        emit!(ReferralBonusAdded {
+            referrer: player.owner,
+            referred_player,
+            amount,
+            level,
+            timestamp: clock.unix_timestamp,
+        });
+        
+        msg!("🎁 Referral bonus added: {} lamports to {} (level {})", amount, player.owner, level);
         Ok(())
     }
 

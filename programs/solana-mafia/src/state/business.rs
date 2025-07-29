@@ -107,25 +107,21 @@ impl Business {
         if !self.is_active {
             return 0;
         }
-
+    
         // 🔒 ЗАЩИТА 1: Проверяем что время корректное
         if current_time <= self.last_claim {
             return 0;
         }
-
+    
         let seconds_since_claim = (current_time - self.last_claim) as u64;
-        
-        // 🔒 ЗАЩИТА 2: МАКСИМУМ 30 дней earnings (предотвращает huge overflows)
-        let capped_seconds = seconds_since_claim;
         
         let daily_earnings = self.calculate_daily_earnings();
         
-        // 🔒 ЗАЩИТА 3: Используем checked math для предотвращения overflow
+        // 🔒 ЗАЩИТА 2: Используем checked math для предотвращения overflow
         let total_earnings = daily_earnings
-            .checked_mul(capped_seconds)
+            .checked_mul(seconds_since_claim)
             .and_then(|x| x.checked_div(86_400))
             .unwrap_or(0);
-        
         
         total_earnings
     }
