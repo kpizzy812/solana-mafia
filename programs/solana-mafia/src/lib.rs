@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::system_program;
 
 pub mod constants; 
 pub mod error;
@@ -54,11 +55,24 @@ pub mod solana_mafia {
             return Err(SolanaMafiaError::GamePaused.into());
         }
         
-        // Pay entry fee
+        // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
+        if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
+            return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+        }
+        
+        // Pay entry fee - ИСПРАВЛЕНО: используем system_program::transfer
         let entry_fee = game_config.entry_fee;
         
-        **ctx.accounts.treasury_wallet.to_account_info().try_borrow_mut_lamports()? += entry_fee;
-        **ctx.accounts.owner.to_account_info().try_borrow_mut_lamports()? -= entry_fee;
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.treasury_wallet.to_account_info(),
+                },
+            ),
+            entry_fee,
+        )?;
         
         // Initialize player
         **player = Player::new(
@@ -95,6 +109,11 @@ pub mod solana_mafia {
             return Err(SolanaMafiaError::GamePaused.into());
         }
         
+        // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
+        if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
+            return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+        }
+        
         // Validate business type
         if business_type as usize >= BUSINESS_TYPES_COUNT {
             return Err(SolanaMafiaError::InvalidBusinessType.into());
@@ -117,10 +136,30 @@ pub mod solana_mafia {
         let treasury_fee = deposit_amount * game_config.treasury_fee_percent as u64 / 100;
         let game_pool_amount = deposit_amount - treasury_fee;
         
-        // Transfer fees
-        **ctx.accounts.treasury_wallet.to_account_info().try_borrow_mut_lamports()? += treasury_fee;
-        **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? += game_pool_amount;
-        **ctx.accounts.owner.to_account_info().try_borrow_mut_lamports()? -= deposit_amount;
+        // ИСПРАВЛЕНО: Безопасные трансферы через system_program
+        // Transfer treasury fee to team wallet
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.treasury_wallet.to_account_info(),
+                },
+            ),
+            treasury_fee,
+        )?;
+        
+        // Transfer game pool to treasury PDA
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.treasury_pda.to_account_info(),
+                },
+            ),
+            game_pool_amount,
+        )?;
         
         // Create business
         let business_enum = BusinessType::from_index(business_type).unwrap();
@@ -178,9 +217,24 @@ pub mod solana_mafia {
             return Err(ProgramError::InsufficientFunds.into());
         }
         
-        // Transfer earnings
-        **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= claimable_amount;
-        **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += claimable_amount;
+        // ИСПРАВЛЕНО: Безопасный трансфер из treasury_pda к игроку используя signer
+        let treasury_seeds = &[
+            TREASURY_SEED,
+            &[ctx.accounts.treasury_pda.bump],
+        ];
+        let treasury_signer = &[&treasury_seeds[..]];
+    
+        system_program::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.treasury_pda.to_account_info(),
+                    to: ctx.accounts.player_owner.to_account_info(),
+                },
+                treasury_signer,
+            ),
+            claimable_amount,
+        )?;
         
         // Update player state
         player.claim_all_earnings()?;
@@ -218,9 +272,17 @@ pub mod solana_mafia {
         let upgrade_cost = game_config.get_upgrade_cost(next_level)
             .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
         
-        // Pay upgrade cost to team
-        **ctx.accounts.treasury_wallet.to_account_info().try_borrow_mut_lamports()? += upgrade_cost;
-        **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? -= upgrade_cost;
+        // ИСПРАВЛЕНО: Безопасный трансфер upgrade cost к команде
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.player_owner.to_account_info(),
+                    to: ctx.accounts.treasury_wallet.to_account_info(),
+                },
+            ),
+            upgrade_cost,
+        )?;
         
         // Apply upgrade
         business.upgrade_level = next_level;
@@ -252,62 +314,77 @@ pub mod solana_mafia {
         Ok(())
     }
     /// Sell business with early exit fees
-pub fn sell_business(
-    ctx: Context<SellBusiness>,
-    business_index: u8,
-) -> Result<()> {
-    let player = &mut ctx.accounts.player;
-    let game_state = &mut ctx.accounts.game_state;
-    let clock = Clock::get()?;
+    pub fn sell_business(
+        ctx: Context<SellBusiness>,
+        business_index: u8,
+    ) -> Result<()> {
+        let player = &mut ctx.accounts.player;
+        let game_state = &mut ctx.accounts.game_state;
+        let clock = Clock::get()?;
+        
+        // Get business
+        if business_index as usize >= player.businesses.len() {
+            return Err(SolanaMafiaError::BusinessNotFound.into());
+        }
+        
+        let business = &mut player.businesses[business_index as usize];
+        
+        if !business.is_active {
+            return Err(SolanaMafiaError::BusinessNotFound.into());
+        }
+        
+        // Calculate days held
+        let days_held = business.days_since_created(clock.unix_timestamp);
+        
+        // Calculate early sell fee using constants
+        let sell_fee_percent = match days_held {
+            0..=7 => 25,
+            8..=14 => 20,
+            15..=21 => 15,
+            22..=28 => 10,
+            29..=30 => 5,
+            _ => 0,
+        };
+        
+        let sell_fee = business.invested_amount * sell_fee_percent / 100;
+        let return_amount = business.invested_amount - sell_fee;
+        
+        // Check if treasury has enough funds
+        let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
+        if treasury_balance < return_amount {
+            return Err(ProgramError::InsufficientFunds.into());
+        }
+        
+        // ИСПРАВЛЕНО: Безопасный трансфер из treasury_pda к игроку используя signer
+        let treasury_seeds = &[
+            TREASURY_SEED,
+            &[ctx.accounts.treasury_pda.bump],
+        ];
+        let treasury_signer = &[&treasury_seeds[..]];
     
-    // Get business
-    if business_index as usize >= player.businesses.len() {
-        return Err(SolanaMafiaError::BusinessNotFound.into());
+        system_program::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.treasury_pda.to_account_info(),
+                    to: ctx.accounts.player_owner.to_account_info(),
+                },
+                treasury_signer,
+            ),
+            return_amount,
+        )?;
+        
+        // Deactivate business
+        business.is_active = false;
+        
+        // Update statistics
+        game_state.add_withdrawal(return_amount);
+        
+        msg!("🔥 Business sold! Days held: {}, Fee: {}%, Return: {} lamports", 
+             days_held, sell_fee_percent, return_amount);
+        
+        Ok(())
     }
-    
-    let business = &mut player.businesses[business_index as usize];
-    
-    if !business.is_active {
-        return Err(SolanaMafiaError::BusinessNotFound.into());
-    }
-    
-    // Calculate days held
-    let days_held = business.days_since_created(clock.unix_timestamp);
-    
-    // Calculate early sell fee using constants
-    let sell_fee_percent = match days_held {
-        0..=7 => 25,
-        8..=14 => 20,
-        15..=21 => 15,
-        22..=28 => 10,
-        29..=30 => 5,
-        _ => 0,
-    };
-    
-    let sell_fee = business.invested_amount * sell_fee_percent / 100;
-    let return_amount = business.invested_amount - sell_fee;
-    
-    // Check if treasury has enough funds
-    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
-    if treasury_balance < return_amount {
-        return Err(ProgramError::InsufficientFunds.into());
-    }
-    
-    // Transfer return amount to player
-    **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
-    **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
-    
-    // Deactivate business
-    business.is_active = false;
-    
-    // Update statistics
-    game_state.add_withdrawal(return_amount);
-    
-    msg!("🔥 Business sold! Days held: {}, Fee: {}%, Return: {} lamports", 
-         days_held, sell_fee_percent, return_amount);
-    
-    Ok(())
-}
 
 /// Add referral bonus (admin only)
 pub fn add_referral_bonus(ctx: Context<AddReferralBonus>, amount: u64) -> Result<()> {
