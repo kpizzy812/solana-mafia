@@ -2,39 +2,40 @@ use anchor_lang::prelude::*;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
 pub enum BusinessType {
-    CryptoKiosk = 0,
-    MemeCasino = 1,
-    NFTLaundry = 2,
-    MiningFarm = 3,
-    DeFiEmpire = 4,
-    SolanaCartel = 5,
+    TobaccoShop = 0,       // Контрабанда сигарет и налички
+    FuneralService = 1,    // "Избавление" от проблем
+    CarWorkshop = 2,       // Разбор краденых авто
+    ItalianRestaurant = 3, // Штаб и встречи мафии
+    GentlemenClub = 4,     // Проституция, кэшфлоу, связи
+    CharityFund = 5,       // Легализация, политическое влияние
 }
 
 impl BusinessType {
     /// Get the array index for this business type
-    pub fn to_index(&self) -> usize {
-        match self {
-            BusinessType::CryptoKiosk => 0,
-            BusinessType::MemeCasino => 1,
-            BusinessType::NFTLaundry => 2,
-            BusinessType::MiningFarm => 3,
-            BusinessType::DeFiEmpire => 4,
-            BusinessType::SolanaCartel => 5,
-        }
+   pub fn to_index(&self) -> usize {
+    match self {
+        BusinessType::TobaccoShop => 0,
+        BusinessType::FuneralService => 1,
+        BusinessType::CarWorkshop => 2,
+        BusinessType::ItalianRestaurant => 3,
+        BusinessType::GentlemenClub => 4,
+        BusinessType::CharityFund => 5,
     }
+}
+
 
     /// Create business type from index
     pub fn from_index(index: u8) -> Option<Self> {
         match index {
-            0 => Some(BusinessType::CryptoKiosk),
-            1 => Some(BusinessType::MemeCasino),
-            2 => Some(BusinessType::NFTLaundry),
-            3 => Some(BusinessType::MiningFarm),
-            4 => Some(BusinessType::DeFiEmpire),
-            5 => Some(BusinessType::SolanaCartel),
+            0 => Some(BusinessType::TobaccoShop),
+            1 => Some(BusinessType::FuneralService),
+            2 => Some(BusinessType::CarWorkshop),
+            3 => Some(BusinessType::ItalianRestaurant),
+            4 => Some(BusinessType::GentlemenClub),
+            5 => Some(BusinessType::CharityFund),
             _ => None,
         }
-    }
+    }    
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]

@@ -22,7 +22,7 @@ pub mod solana_mafia {
         let game_config = &mut ctx.accounts.game_config;
         let clock = Clock::get()?;
         
-        // Initialize GameState
+        // Initialize GameState (БЕЗ is_paused!)
         **game_state = GameState::new(
             ctx.accounts.authority.key(),
             treasury_wallet,
@@ -50,17 +50,14 @@ pub mod solana_mafia {
         let player = &mut ctx.accounts.player;
         let clock = Clock::get()?;
         
-        // Validate game is not paused
-        if game_state.is_paused {
-            return Err(SolanaMafiaError::GamePaused.into());
-        }
+        // 🔒 УБРАЛИ ПРОВЕРКУ is_paused - игра всегда активна!
         
         // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
         if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
             return Err(SolanaMafiaError::UnauthorizedAdmin.into());
         }
         
-        // Pay entry fee - ИСПРАВЛЕНО: используем system_program::transfer
+        // Pay entry fee
         let entry_fee = game_config.entry_fee;
         
         system_program::transfer(
@@ -104,10 +101,7 @@ pub mod solana_mafia {
         let player = &mut ctx.accounts.player;
         let clock = Clock::get()?;
         
-        // Validate game is not paused
-        if game_state.is_paused {
-            return Err(SolanaMafiaError::GamePaused.into());
-        }
+        // 🔒 УБРАЛИ ПРОВЕРКУ is_paused - игра всегда активна!
         
         // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
         if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
@@ -136,7 +130,6 @@ pub mod solana_mafia {
         let treasury_fee = deposit_amount * game_config.treasury_fee_percent as u64 / 100;
         let game_pool_amount = deposit_amount - treasury_fee;
         
-        // ИСПРАВЛЕНО: Безопасные трансферы через system_program
         // Transfer treasury fee to team wallet
         system_program::transfer(
             CpiContext::new(
@@ -217,24 +210,9 @@ pub mod solana_mafia {
             return Err(ProgramError::InsufficientFunds.into());
         }
         
-        // ИСПРАВЛЕНО: Безопасный трансфер из treasury_pda к игроку используя signer
-        let treasury_seeds = &[
-            TREASURY_SEED,
-            &[ctx.accounts.treasury_pda.bump],
-        ];
-        let treasury_signer = &[&treasury_seeds[..]];
-    
-        system_program::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.treasury_pda.to_account_info(),
-                    to: ctx.accounts.player_owner.to_account_info(),
-                },
-                treasury_signer,
-            ),
-            claimable_amount,
-        )?;
+        // 🔧 ИСПРАВЛЕНО: Программный трансфер lamports без system_program
+        **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= claimable_amount;
+        **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += claimable_amount;
         
         // Update player state
         player.claim_all_earnings()?;
@@ -272,7 +250,7 @@ pub mod solana_mafia {
         let upgrade_cost = game_config.get_upgrade_cost(next_level)
             .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
         
-        // ИСПРАВЛЕНО: Безопасный трансфер upgrade cost к команде
+        // Transfer upgrade cost to team
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -313,6 +291,7 @@ pub mod solana_mafia {
         msg!("✅ Player health check passed");
         Ok(())
     }
+
     /// Sell business with early exit fees
     pub fn sell_business(
         ctx: Context<SellBusiness>,
@@ -355,24 +334,9 @@ pub mod solana_mafia {
             return Err(ProgramError::InsufficientFunds.into());
         }
         
-        // ИСПРАВЛЕНО: Безопасный трансфер из treasury_pda к игроку используя signer
-        let treasury_seeds = &[
-            TREASURY_SEED,
-            &[ctx.accounts.treasury_pda.bump],
-        ];
-        let treasury_signer = &[&treasury_seeds[..]];
-    
-        system_program::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.treasury_pda.to_account_info(),
-                    to: ctx.accounts.player_owner.to_account_info(),
-                },
-                treasury_signer,
-            ),
-            return_amount,
-        )?;
+        // 🔧 ИСПРАВЛЕНО: Программный трансфер lamports без system_program
+        **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
+        **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
         
         // Deactivate business
         business.is_active = false;
@@ -386,83 +350,29 @@ pub mod solana_mafia {
         Ok(())
     }
 
-/// Add referral bonus (admin only)
-pub fn add_referral_bonus(ctx: Context<AddReferralBonus>, amount: u64) -> Result<()> {
-    let player = &mut ctx.accounts.player;
-    let game_state = &mut ctx.accounts.game_state;
-    
-    // Add bonus to pending_referral_earnings with overflow protection
-    player.pending_referral_earnings = player.pending_referral_earnings
-        .checked_add(amount)
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-    
-    // Update global statistics
-    game_state.total_referral_paid = game_state.total_referral_paid
-        .checked_add(amount)
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-    
-    msg!("🎁 Referral bonus added: {} lamports", amount);
-    Ok(())
-}
-
-/// Admin: Toggle game pause state
-pub fn toggle_pause(ctx: Context<TogglePause>) -> Result<()> {
-    let game_state = &mut ctx.accounts.game_state;
-    
-    // Only authority can pause
-    if ctx.accounts.authority.key() != game_state.authority {
-        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+    /// ✅ ОСТАВЛЯЕМ: Add referral bonus (admin only) - НУЖНА ДЛЯ РЕФЕРАЛЬНОЙ СИСТЕМЫ
+    pub fn add_referral_bonus(ctx: Context<AddReferralBonus>, amount: u64) -> Result<()> {
+        let player = &mut ctx.accounts.player;
+        let game_state = &mut ctx.accounts.game_state;
+        
+        // Add bonus to pending_referral_earnings with overflow protection
+        player.pending_referral_earnings = player.pending_referral_earnings
+            .checked_add(amount)
+            .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+        // Update global statistics
+        game_state.total_referral_paid = game_state.total_referral_paid
+            .checked_add(amount)
+            .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+        msg!("🎁 Referral bonus added: {} lamports", amount);
+        Ok(())
     }
-    
-    game_state.is_paused = !game_state.is_paused;
-    
-    msg!("⏸️ Game pause toggled. New state: {}", game_state.is_paused);
-    
-    Ok(())
-}
 
-/// Emergency: Stop all financial operations
-pub fn emergency_pause(ctx: Context<EmergencyPause>) -> Result<()> {
-    let game_state = &mut ctx.accounts.game_state;
-    
-    // Only authority can activate emergency
-    if ctx.accounts.authority.key() != game_state.authority {
-        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
-    }
-    
-    game_state.is_paused = true;
-    
-    msg!("🆘 EMERGENCY PAUSE ACTIVATED!");
-    msg!("All financial operations are now disabled.");
-    
-    Ok(())
-}
-
-/// View: Get treasury statistics
-pub fn get_treasury_stats(ctx: Context<GetTreasuryStats>) -> Result<()> {
-    let game_state = &ctx.accounts.game_state;
-    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
-    
-    msg!("📊 TREASURY STATISTICS:");
-    msg!("Treasury balance: {} lamports", treasury_balance);
-    msg!("Total invested: {} lamports", game_state.total_invested);
-    msg!("Total withdrawn: {} lamports", game_state.total_withdrawn);
-    msg!("Total players: {}", game_state.total_players);
-    msg!("Game paused: {}", game_state.is_paused);
-    
-    let pending_in_system = game_state.total_invested
-        .checked_sub(game_state.total_withdrawn)
-        .unwrap_or(0);
-    msg!("Pending in system: {} lamports", pending_in_system);
-    
-    if treasury_balance < pending_in_system {
-        msg!("⚠️ WARNING: Treasury balance less than pending obligations!");
-    } else {
-        msg!("✅ Treasury health: OK");
-    }
-    
-    Ok(())
-}
+    // ❌ УДАЛИЛИ ВСЕ АДМИНСКИЕ ФУНКЦИИ ПАУЗЫ:
+    // - toggle_pause
+    // - emergency_pause  
+    // - get_treasury_stats
 }
 
 // ===== ACCOUNT CONTEXTS =====
@@ -718,45 +628,4 @@ pub struct AddReferralBonus<'info> {
         bump = game_state.bump
     )]
     pub game_state: Account<'info, GameState>,
-}
-
-#[derive(Accounts)]
-pub struct TogglePause<'info> {
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    
-    #[account(
-        mut,
-        seeds = [GAME_STATE_SEED],
-        bump = game_state.bump
-    )]
-    pub game_state: Account<'info, GameState>,
-}
-
-#[derive(Accounts)]
-pub struct EmergencyPause<'info> {
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    
-    #[account(
-        mut,
-        seeds = [GAME_STATE_SEED],
-        bump = game_state.bump
-    )]
-    pub game_state: Account<'info, GameState>,
-}
-
-#[derive(Accounts)]
-pub struct GetTreasuryStats<'info> {
-    #[account(
-        seeds = [GAME_STATE_SEED],
-        bump = game_state.bump
-    )]
-    pub game_state: Account<'info, GameState>,
-    
-    #[account(
-        seeds = [TREASURY_SEED],
-        bump = treasury_pda.bump
-    )]
-    pub treasury_pda: Account<'info, Treasury>,
 }
