@@ -127,7 +127,7 @@ describe("🌐 DEVNET REAL TESTS", () => {
       const treasuryBalanceBefore = await provider.connection.getBalance(TREASURY_WALLET);
       
       const tx = await program.methods
-        .createPlayer()
+        .createPlayer(null)
         .accounts({
           owner: testPlayer1.publicKey,
           player: player1Pda,
@@ -163,7 +163,7 @@ describe("🌐 DEVNET REAL TESTS", () => {
       console.log("👤 Creating Player 2...");
 
       const tx = await program.methods
-        .createPlayer()
+        .createPlayer(null)
         .accounts({
           owner: testPlayer2.publicKey,
           player: player2Pda,
