@@ -7,7 +7,7 @@ use anchor_spl::{
         create_metadata_accounts_v3,
         CreateMetadataAccountsV3,
         Metadata,
-        mpl_token_metadata::types::{DataV2, Creator}, 
+        mpl_token_metadata::types::{DataV2, Creator},
     },
 };
 
@@ -242,17 +242,15 @@ pub mod solana_mafia {
         let player = &mut ctx.accounts.player;
         let clock = Clock::get()?;
         
-        // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
+        // Validate business logic (same as before)
         if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
             return Err(SolanaMafiaError::UnauthorizedAdmin.into());
         }
         
-        // Validate business type
         if business_type as usize >= BUSINESS_TYPES_COUNT {
             return Err(SolanaMafiaError::InvalidBusinessType.into());
         }
         
-        // Get business rate and validate deposit
         let daily_rate = game_config.get_business_rate(business_type as usize);
         let min_deposit = game_config.get_min_deposit(business_type as usize);
         
@@ -260,16 +258,14 @@ pub mod solana_mafia {
             return Err(SolanaMafiaError::InsufficientDeposit.into());
         }
         
-        // Check business limit
         if player.businesses.len() >= MAX_BUSINESSES_PER_PLAYER as usize {
             return Err(SolanaMafiaError::MaxBusinessesReached.into());
         }
         
-        // Calculate treasury fee (20% to team)
+        // Transfer funds (same as before)
         let treasury_fee = deposit_amount * game_config.treasury_fee_percent as u64 / 100;
         let game_pool_amount = deposit_amount - treasury_fee;
         
-        // Transfer treasury fee to team wallet
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -281,7 +277,6 @@ pub mod solana_mafia {
             treasury_fee,
         )?;
         
-        // Transfer game pool to treasury PDA
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -293,11 +288,67 @@ pub mod solana_mafia {
             game_pool_amount,
         )?;
 
-        // 🆕 MINT NFT
-        let business_enum = BusinessType::from_index(business_type).unwrap();
-        let serial_number = game_state.get_next_nft_serial();
+        // 🔧 РУЧНАЯ инициализация NFT mint
+        let mint_rent = ctx.accounts.rent.minimum_balance(82); // Mint account size
         
-        // Initialize NFT mint
+        // Create mint account
+        system_program::create_account(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::CreateAccount {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.nft_mint.to_account_info(),
+                },
+            ),
+            mint_rent,
+            82,
+            &ctx.accounts.token_program.key(),
+        )?;
+        
+        // Initialize mint
+        let init_mint_ctx = CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::InitializeMint {
+                mint: ctx.accounts.nft_mint.to_account_info(),
+                rent: ctx.accounts.rent.to_account_info(),
+            },
+        );
+        anchor_spl::token::initialize_mint(
+            init_mint_ctx,
+            0, // decimals
+            &ctx.accounts.owner.key(),
+            Some(&ctx.accounts.owner.key()),
+        )?;
+
+        // 🔧 РУЧНАЯ инициализация token account
+        let token_rent = ctx.accounts.rent.minimum_balance(165); // Token account size
+        
+        system_program::create_account(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::CreateAccount {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.nft_token_account.to_account_info(),
+                },
+            ),
+            token_rent,
+            165,
+            &ctx.accounts.token_program.key(),
+        )?;
+        
+        // Initialize token account
+        let init_token_ctx = CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::InitializeAccount {
+                account: ctx.accounts.nft_token_account.to_account_info(),
+                mint: ctx.accounts.nft_mint.to_account_info(),
+                authority: ctx.accounts.owner.to_account_info(),
+                rent: ctx.accounts.rent.to_account_info(),
+            },
+        );
+        anchor_spl::token::initialize_account(init_token_ctx)?;
+
+        // Mint NFT
         let cpi_accounts = MintTo {
             mint: ctx.accounts.nft_mint.to_account_info(),
             to: ctx.accounts.nft_token_account.to_account_info(),
@@ -305,9 +356,12 @@ pub mod solana_mafia {
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        token::mint_to(cpi_ctx, 1)?; // Mint 1 NFT
+        token::mint_to(cpi_ctx, 1)?;
 
-        // Create metadata
+        // Create metadata (same as before)
+        let business_enum = BusinessType::from_index(business_type).unwrap();
+        let serial_number = game_state.get_next_nft_serial();
+        
         let nft_name = format!("{} #{}", BUSINESS_NFT_NAMES[business_type as usize], serial_number);
         let nft_uri = BUSINESS_NFT_URIS[business_type as usize].to_string();
         
@@ -340,7 +394,7 @@ pub mod solana_mafia {
 
         create_metadata_accounts_v3(metadata_ctx, data_v2, true, true, None)?;
 
-        // Create business with NFT mint
+        // Rest of the business logic (same as before)
         let mut business = Business::new(
             business_enum,
             deposit_amount,
@@ -349,7 +403,6 @@ pub mod solana_mafia {
         );
         business.set_nft_mint(ctx.accounts.nft_mint.key());
         
-        // Initialize BusinessNFT account
         let business_nft = &mut ctx.accounts.business_nft;
         **business_nft = BusinessNFT::new(
             ctx.accounts.owner.key(),
@@ -363,22 +416,18 @@ pub mod solana_mafia {
             ctx.bumps.business_nft,
         );
         
-        // Add to player
         player.add_business(business)?;
         
-        // Update game statistics
         game_state.add_investment(deposit_amount);
         game_state.add_treasury_collection(treasury_fee);
         game_state.add_business();
-        game_state.add_nft_mint(); // 🆕
+        game_state.add_nft_mint();
         
-        // 🆕 Устанавливаем расписание начислений для первого бизнеса
         if player.businesses.len() == 1 {
             let player_seed = ctx.accounts.owner.key().to_bytes()[0] as u64;
             player.set_earnings_schedule(clock.unix_timestamp, player_seed)?;
         }
 
-        // 🆕 Эмиттим NFT event
         emit!(BusinessNFTMinted {
             player: ctx.accounts.owner.key(),
             business_type,
@@ -389,7 +438,6 @@ pub mod solana_mafia {
             created_at: clock.unix_timestamp,
         });
 
-        // Эмиттим business event
         emit!(BusinessCreated {
             player: ctx.accounts.owner.key(),
             business_type,
@@ -1196,8 +1244,7 @@ pub struct CreateBusinessWithNFT<'info> {
     )]
     pub game_state: Account<'info, GameState>,
 
-    /// Treasury wallet where team fees go
-    /// CHECK: This is validated against game_state.treasury_wallet
+    /// CHECK: Treasury wallet validated against game_state.treasury_wallet
     #[account(mut)]
     pub treasury_wallet: AccountInfo<'info>,
 
@@ -1208,23 +1255,13 @@ pub struct CreateBusinessWithNFT<'info> {
     )]
     pub treasury_pda: Account<'info, Treasury>,
 
-    // 🔧 ИСПРАВЛЕНО: Правильные типы для NFT
-    #[account(
-        init,
-        payer = owner,
-        mint::decimals = 0,
-        mint::authority = owner,
-        mint::freeze_authority = owner
-    )]
-    pub nft_mint: Account<'info, Mint>,
+    /// CHECK: NFT mint account, will be initialized in instruction
+    #[account(mut)]
+    pub nft_mint: Signer<'info>,
 
-    #[account(
-        init,
-        payer = owner,
-        associated_token::mint = nft_mint,
-        associated_token::authority = owner
-    )]
-    pub nft_token_account: Account<'info, TokenAccount>,
+    /// CHECK: NFT token account, will be initialized in instruction
+    #[account(mut)]
+    pub nft_token_account: AccountInfo<'info>,
 
     #[account(
         init,
@@ -1235,7 +1272,7 @@ pub struct CreateBusinessWithNFT<'info> {
     )]
     pub business_nft: Account<'info, BusinessNFT>,
 
-    /// CHECK: This is used for metadata creation
+    /// CHECK: Metadata account for NFT
     #[account(mut)]
     pub nft_metadata: UncheckedAccount<'info>,
 
@@ -1273,16 +1310,13 @@ pub struct SellBusinessWithNFTBurn<'info> {
     )]
     pub game_state: Account<'info, GameState>,
 
-    // 🔧 ИСПРАВЛЕНО: Правильные типы
+    /// CHECK: NFT mint account
     #[account(mut)]
-    pub nft_mint: Account<'info, Mint>,
+    pub nft_mint: AccountInfo<'info>,
 
-    #[account(
-        mut,
-        associated_token::mint = nft_mint,
-        associated_token::authority = player_owner
-    )]
-    pub nft_token_account: Account<'info, TokenAccount>,
+    /// CHECK: NFT token account
+    #[account(mut)]
+    pub nft_token_account: AccountInfo<'info>,
 
     #[account(
         mut,
@@ -1309,8 +1343,7 @@ pub struct UpgradeBusinessNFT<'info> {
     )]
     pub player: Account<'info, Player>,
     
-    /// Treasury wallet where upgrade fees go
-    /// CHECK: This is validated against game_state.treasury_wallet
+    /// CHECK: Treasury wallet validated against game_state.treasury_wallet
     #[account(
         mut,
         address = game_state.treasury_wallet
@@ -1330,8 +1363,8 @@ pub struct UpgradeBusinessNFT<'info> {
     )]
     pub game_config: Account<'info, GameConfig>,
 
-    // 🔧 ИСПРАВЛЕНО: Правильный тип
-    pub nft_mint: Account<'info, Mint>,
+    /// CHECK: NFT mint account
+    pub nft_mint: AccountInfo<'info>,
 
     #[account(
         mut,
