@@ -48,6 +48,7 @@ pub struct Business {
     pub last_claim: i64,
     pub created_at: i64,
     pub is_active: bool,
+    pub nft_mint: Option<Pubkey>,
 }
 
 impl Business {
@@ -60,7 +61,8 @@ impl Business {
         8 + // total_earned
         8 + // last_claim
         8 + // created_at
-        1;  // is_active
+        1 +  // is_active
+        33; // 🆕 nft_mint Option<Pubkey> (1 + 32)
 
     /// Create a new business
     pub fn new(
@@ -78,7 +80,25 @@ impl Business {
             last_claim: current_time,
             created_at: current_time,
             is_active: true,
+            nft_mint: None, // 🆕 Будет установлено при создании NFT
         }
+    }
+
+    /// 🆕 Set NFT mint address
+    pub fn set_nft_mint(&mut self, mint: Pubkey) {
+        self.nft_mint = Some(mint);
+    }
+
+    /// 🆕 Get NFT name based on business type
+    pub fn get_nft_name(&self) -> &'static str {
+        use crate::constants::BUSINESS_NFT_NAMES;
+        BUSINESS_NFT_NAMES[self.business_type.to_index()]
+    }
+
+    /// 🆕 Get NFT URI based on business type
+    pub fn get_nft_uri(&self) -> &'static str {
+        use crate::constants::BUSINESS_NFT_URIS;
+        BUSINESS_NFT_URIS[self.business_type.to_index()]
     }
 
     /// Calculate days since creation (БЕЗОПАСНО)

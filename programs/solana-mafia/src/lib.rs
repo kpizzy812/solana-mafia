@@ -1,5 +1,15 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
+use anchor_spl::{
+    token::{self, Token, TokenAccount, Mint, MintTo, Burn}, 
+    associated_token::AssociatedToken,
+    metadata::{
+        create_metadata_accounts_v3,
+        CreateMetadataAccountsV3,
+        Metadata,
+        mpl_token_metadata::types::{DataV2, Creator}, 
+    },
+};
 
 pub mod constants; 
 pub mod error;
@@ -70,6 +80,36 @@ pub struct ReferralBonusAdded {
     pub amount: u64,
     pub level: u8, // 1, 2 или 3
     pub timestamp: i64,
+}
+
+// 🆕 NFT EVENTS
+#[event]
+pub struct BusinessNFTMinted {
+    pub player: Pubkey,
+    pub business_type: u8,
+    pub mint: Pubkey,
+    pub serial_number: u64,
+    pub invested_amount: u64,
+    pub daily_rate: u16,
+    pub created_at: i64,
+}
+
+#[event]
+pub struct BusinessNFTBurned {
+    pub player: Pubkey,
+    pub mint: Pubkey,
+    pub business_type: u8,
+    pub serial_number: u64,
+    pub burned_at: i64,
+}
+
+#[event]
+pub struct BusinessNFTUpgraded {
+    pub player: Pubkey,
+    pub mint: Pubkey,
+    pub old_level: u8,
+    pub new_level: u8,
+    pub new_daily_rate: u16,
 }
 
 // ============ FRONTEND DATA STRUCTURES ============
@@ -191,9 +231,9 @@ pub mod solana_mafia {
         Ok(())
     }
 
-    /// Create business (requires existing player)
-    pub fn create_business(
-        ctx: Context<CreateBusiness>,
+    /// Create business with NFT (requires existing player)
+    pub fn create_business_with_nft(
+        ctx: Context<CreateBusinessWithNFT>,
         business_type: u8,
         deposit_amount: u64,
     ) -> Result<()> {
@@ -201,8 +241,6 @@ pub mod solana_mafia {
         let game_state = &mut ctx.accounts.game_state;
         let player = &mut ctx.accounts.player;
         let clock = Clock::get()?;
-        
-        // 🔒 УБРАЛИ ПРОВЕРКУ is_paused - игра всегда активна!
         
         // 🔒 БЕЗОПАСНОСТЬ: Проверяем что treasury_wallet соответствует game_state
         if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
@@ -254,14 +292,75 @@ pub mod solana_mafia {
             ),
             game_pool_amount,
         )?;
-        
-        // Create business
+
+        // 🆕 MINT NFT
         let business_enum = BusinessType::from_index(business_type).unwrap();
-        let business = Business::new(
+        let serial_number = game_state.get_next_nft_serial();
+        
+        // Initialize NFT mint
+        let cpi_accounts = MintTo {
+            mint: ctx.accounts.nft_mint.to_account_info(),
+            to: ctx.accounts.nft_token_account.to_account_info(),
+            authority: ctx.accounts.owner.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        token::mint_to(cpi_ctx, 1)?; // Mint 1 NFT
+
+        // Create metadata
+        let nft_name = format!("{} #{}", BUSINESS_NFT_NAMES[business_type as usize], serial_number);
+        let nft_uri = BUSINESS_NFT_URIS[business_type as usize].to_string();
+        
+        let data_v2 = DataV2 {
+            name: nft_name,
+            symbol: NFT_COLLECTION_SYMBOL.to_string(),
+            uri: nft_uri,
+            seller_fee_basis_points: 0,
+            creators: Some(vec![Creator {
+                address: ctx.accounts.owner.key(),
+                verified: false,
+                share: 100,
+            }]),
+            collection: None,
+            uses: None,
+        };
+
+        let metadata_ctx = CpiContext::new(
+            ctx.accounts.token_metadata_program.to_account_info(),
+            CreateMetadataAccountsV3 {
+                metadata: ctx.accounts.nft_metadata.to_account_info(),
+                mint: ctx.accounts.nft_mint.to_account_info(),
+                mint_authority: ctx.accounts.owner.to_account_info(),
+                update_authority: ctx.accounts.owner.to_account_info(),
+                payer: ctx.accounts.owner.to_account_info(),
+                system_program: ctx.accounts.system_program.to_account_info(),
+                rent: ctx.accounts.rent.to_account_info(),
+            },
+        );
+
+        create_metadata_accounts_v3(metadata_ctx, data_v2, true, true, None)?;
+
+        // Create business with NFT mint
+        let mut business = Business::new(
             business_enum,
             deposit_amount,
             daily_rate,
             clock.unix_timestamp,
+        );
+        business.set_nft_mint(ctx.accounts.nft_mint.key());
+        
+        // Initialize BusinessNFT account
+        let business_nft = &mut ctx.accounts.business_nft;
+        **business_nft = BusinessNFT::new(
+            ctx.accounts.owner.key(),
+            business_enum,
+            ctx.accounts.nft_mint.key(),
+            ctx.accounts.nft_token_account.key(),
+            deposit_amount,
+            daily_rate,
+            clock.unix_timestamp,
+            serial_number,
+            ctx.bumps.business_nft,
         );
         
         // Add to player
@@ -271,6 +370,7 @@ pub mod solana_mafia {
         game_state.add_investment(deposit_amount);
         game_state.add_treasury_collection(treasury_fee);
         game_state.add_business();
+        game_state.add_nft_mint(); // 🆕
         
         // 🆕 Устанавливаем расписание начислений для первого бизнеса
         if player.businesses.len() == 1 {
@@ -278,7 +378,18 @@ pub mod solana_mafia {
             player.set_earnings_schedule(clock.unix_timestamp, player_seed)?;
         }
 
-        // 🆕 Эмиттим event
+        // 🆕 Эмиттим NFT event
+        emit!(BusinessNFTMinted {
+            player: ctx.accounts.owner.key(),
+            business_type,
+            mint: ctx.accounts.nft_mint.key(),
+            serial_number,
+            invested_amount: deposit_amount,
+            daily_rate,
+            created_at: clock.unix_timestamp,
+        });
+
+        // Эмиттим business event
         emit!(BusinessCreated {
             player: ctx.accounts.owner.key(),
             business_type,
@@ -288,7 +399,8 @@ pub mod solana_mafia {
             created_at: clock.unix_timestamp,
         });
 
-        msg!("🏪 Business created! Type: {}, Investment: {} lamports", business_type, deposit_amount);
+        msg!("🏪🖼️ Business NFT created! Type: {}, Investment: {} lamports, Serial: {}", 
+            business_type, deposit_amount, serial_number);
         Ok(())
     }
 
@@ -348,71 +460,6 @@ pub mod solana_mafia {
         Ok(())
     }
 
-    /// Upgrade business (donation to team)
-    pub fn upgrade_business(ctx: Context<UpgradeBusiness>, business_index: u8) -> Result<()> {
-        let player = &mut ctx.accounts.player;
-        let game_state = &mut ctx.accounts.game_state;
-        let game_config = &ctx.accounts.game_config;
-        
-        // Get business
-        if business_index as usize >= player.businesses.len() {
-            return Err(SolanaMafiaError::BusinessNotFound.into());
-        }
-        
-        let business = &mut player.businesses[business_index as usize];
-        
-        if !business.is_active {
-            return Err(SolanaMafiaError::BusinessNotFound.into());
-        }
-        
-        // Check upgrade level
-        if business.upgrade_level >= MAX_UPGRADE_LEVEL {
-            return Err(SolanaMafiaError::InvalidUpgradeLevel.into());
-        }
-        
-        let next_level = business.upgrade_level + 1;
-        let upgrade_cost = game_config.get_upgrade_cost(next_level)
-            .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
-        
-        // Transfer upgrade cost to team
-        system_program::transfer(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.player_owner.to_account_info(),
-                    to: ctx.accounts.treasury_wallet.to_account_info(),
-                },
-            ),
-            upgrade_cost,
-        )?;
-        
-        // Apply upgrade
-        business.upgrade_level = next_level;
-        let bonus = game_config.get_upgrade_bonus(next_level);
-        business.daily_rate = business.daily_rate
-            .checked_add(bonus)
-            .ok_or(SolanaMafiaError::MathOverflow)?;
-        
-        // Update statistics
-        game_state.total_treasury_collected = game_state.total_treasury_collected
-            .checked_add(upgrade_cost)
-            .ok_or(SolanaMafiaError::MathOverflow)?;
-
-        // 🆕 Эмиттим event
-        emit!(BusinessUpgraded {
-            player: ctx.accounts.player_owner.key(),
-            business_index,
-            new_level: next_level,
-            upgrade_cost,
-            new_daily_rate: business.daily_rate,
-        });
-        
-        msg!("⬆️ Business upgraded to level {}", next_level);
-        msg!("Cost: {} lamports, New rate: {} bp", upgrade_cost, business.daily_rate);
-        
-        Ok(())
-    }
-
     /// Health check for player data
     pub fn health_check_player(ctx: Context<HealthCheckPlayer>) -> Result<()> {
         let player = &ctx.accounts.player;
@@ -467,7 +514,7 @@ pub mod solana_mafia {
             return Err(ProgramError::InsufficientFunds.into());
         }
         
-        // 🔧 ИСПРАВЛЕНО: Программный трансфер lamports без system_program
+        // 🔧 Программный трансфер lamports без system_program
         **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
         **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
         
@@ -492,7 +539,7 @@ pub mod solana_mafia {
         Ok(())
     }
 
-    /// ✅ ОСТАВЛЯЕМ: Add referral bonus (admin only) - НУЖНА ДЛЯ РЕФЕРАЛЬНОЙ СИСТЕМЫ
+    /// Add referral bonus 
     pub fn add_referral_bonus(
         ctx: Context<AddReferralBonus>, 
         amount: u64,
@@ -626,7 +673,204 @@ pub fn get_global_stats(ctx: Context<GetGlobalStats>) -> Result<()> {
     Ok(())
 }
 
+/// 🆕 Burn business NFT when selling
+pub fn sell_business_with_nft_burn(
+    ctx: Context<SellBusinessWithNFTBurn>,
+    business_index: u8,
+) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let game_state = &mut ctx.accounts.game_state;
+    let business_nft = &mut ctx.accounts.business_nft;
+    let clock = Clock::get()?;
+    
+    // Get business
+    if business_index as usize >= player.businesses.len() {
+        return Err(SolanaMafiaError::BusinessNotFound.into());
+    }
+    
+    let business = &mut player.businesses[business_index as usize];
+    
+    if !business.is_active {
+        return Err(SolanaMafiaError::BusinessNotFound.into());
+    }
+    
+    // Verify NFT ownership
+    if business_nft.player != ctx.accounts.player_owner.key() {
+        return Err(SolanaMafiaError::BusinessNotOwned.into());
+    }
+    
+    if business_nft.mint != business.nft_mint.unwrap_or_default() {
+        return Err(SolanaMafiaError::BusinessNotOwned.into());
+    }
+    
+    // Calculate days held and return amount (same logic as before)
+    let days_held = business.days_since_created(clock.unix_timestamp);
+    
+    let sell_fee_percent = match days_held {
+        0..=7 => 25,
+        8..=14 => 20,
+        15..=21 => 15,
+        22..=28 => 10,
+        29..=30 => 5,
+        _ => 0,
+    };
+    
+    let sell_fee = business.invested_amount * sell_fee_percent / 100;
+    let return_amount = business.invested_amount - sell_fee;
+    
+    // Check if treasury has enough funds
+    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
+    if treasury_balance < return_amount {
+        return Err(ProgramError::InsufficientFunds.into());
+    }
+    
+    // Transfer return amount to player
+    **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
+    **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
+    
+    // 🆕 Burn the NFT
+    let cpi_accounts = token::Burn {
+        mint: ctx.accounts.nft_mint.to_account_info(),
+        from: ctx.accounts.nft_token_account.to_account_info(),
+        authority: ctx.accounts.player_owner.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    token::burn(cpi_ctx, 1)?; // Burn 1 NFT
+    
+    // Deactivate business and mark NFT as burned
+    business.is_active = false;
+    business_nft.burn();
+    
+    // Update statistics
+    game_state.add_withdrawal(return_amount);
+    game_state.add_nft_burn(); // 🆕
+    
+    // 🆕 Эмиттим NFT burn event
+    emit!(BusinessNFTBurned {
+        player: ctx.accounts.player_owner.key(),
+        mint: ctx.accounts.nft_mint.key(),
+        business_type: business.business_type.to_index() as u8,
+        serial_number: business_nft.serial_number,
+        burned_at: clock.unix_timestamp,
+    });
+    
+    emit!(BusinessSold {
+        player: ctx.accounts.player_owner.key(),
+        business_index,
+        days_held,
+        sell_fee_percent: sell_fee_percent as u8,
+        return_amount,
+    });
+    
+    msg!("🔥🖼️ Business NFT burned! Days held: {}, Fee: {}%, Return: {} lamports", 
+         days_held, sell_fee_percent, return_amount);
+    
+    Ok(())
+}
 
+/// 🆕 Upgrade business and update NFT metadata
+pub fn upgrade_business_nft(
+    ctx: Context<UpgradeBusinessNFT>,
+    business_index: u8,
+) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let game_state = &mut ctx.accounts.game_state;
+    let game_config = &ctx.accounts.game_config;
+    let business_nft = &mut ctx.accounts.business_nft;
+    
+    // Get business
+    if business_index as usize >= player.businesses.len() {
+        return Err(SolanaMafiaError::BusinessNotFound.into());
+    }
+    
+    let business = &mut player.businesses[business_index as usize];
+    
+    if !business.is_active {
+        return Err(SolanaMafiaError::BusinessNotFound.into());
+    }
+    
+    // Verify NFT ownership
+    if business_nft.player != ctx.accounts.player_owner.key() {
+        return Err(SolanaMafiaError::BusinessNotOwned.into());
+    }
+    
+    // Check upgrade level
+    if business.upgrade_level >= MAX_UPGRADE_LEVEL {
+        return Err(SolanaMafiaError::InvalidUpgradeLevel.into());
+    }
+    
+    let old_level = business.upgrade_level;
+    let next_level = business.upgrade_level + 1;
+    let upgrade_cost = game_config.get_upgrade_cost(next_level)
+        .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
+    
+    // Transfer upgrade cost to team
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.player_owner.to_account_info(),
+                to: ctx.accounts.treasury_wallet.to_account_info(),
+            },
+        ),
+        upgrade_cost,
+    )?;
+    
+    // Apply upgrade
+    business.upgrade_level = next_level;
+    let bonus = game_config.get_upgrade_bonus(next_level);
+    business.daily_rate = business.daily_rate
+        .checked_add(bonus)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    // 🆕 Update NFT metadata
+    business_nft.upgrade(next_level, business.daily_rate);
+    
+    // Update statistics
+    game_state.total_treasury_collected = game_state.total_treasury_collected
+        .checked_add(upgrade_cost)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    // 🆕 Эмиттим NFT upgrade event
+    emit!(BusinessNFTUpgraded {
+        player: ctx.accounts.player_owner.key(),
+        mint: ctx.accounts.nft_mint.key(),
+        old_level,
+        new_level: next_level,
+        new_daily_rate: business.daily_rate,
+    });
+
+    emit!(BusinessUpgraded {
+        player: ctx.accounts.player_owner.key(),
+        business_index,
+        new_level: next_level,
+        upgrade_cost,
+        new_daily_rate: business.daily_rate,
+    });
+    
+    msg!("⬆️🖼️ Business NFT upgraded to level {}! Cost: {} lamports, New rate: {} bp", 
+         next_level, upgrade_cost, business.daily_rate);
+    
+    Ok(())
+}
+
+/// 🆕 Get NFT metadata for frontend
+pub fn get_business_nft_data(ctx: Context<GetBusinessNFTData>) -> Result<()> {
+    let business_nft = &ctx.accounts.business_nft;
+    
+    msg!("NFT_DATA: player={}, mint={}, type={}, level={}, rate={}, serial={}, burned={}", 
+         business_nft.player,
+         business_nft.mint,
+         business_nft.business_type.to_index(),
+         business_nft.upgrade_level,
+         business_nft.daily_rate,
+         business_nft.serial_number,
+         business_nft.is_burned
+    );
+    
+    Ok(())
+}
 }
 
 // ===== ACCOUNT CONTEXTS =====
@@ -786,43 +1030,6 @@ pub struct ClaimEarnings<'info> {
 }
 
 #[derive(Accounts)]
-pub struct UpgradeBusiness<'info> {
-    #[account(mut)]
-    pub player_owner: Signer<'info>,
-    
-    #[account(
-        mut,
-        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
-        bump = player.bump,
-        constraint = player.owner == player_owner.key()
-    )]
-    pub player: Account<'info, Player>,
-    
-    /// Treasury wallet where upgrade fees go
-    /// CHECK: This is validated against game_state.treasury_wallet
-    #[account(
-        mut,
-        address = game_state.treasury_wallet
-    )]
-    pub treasury_wallet: AccountInfo<'info>,
-    
-    #[account(
-        mut,
-        seeds = [GAME_STATE_SEED],
-        bump = game_state.bump
-    )]
-    pub game_state: Account<'info, GameState>,
-    
-    #[account(
-        seeds = [GAME_CONFIG_SEED],
-        bump = game_config.bump
-    )]
-    pub game_config: Account<'info, GameConfig>,
-    
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
 pub struct HealthCheckPlayer<'info> {
     #[account(
         seeds = [PLAYER_SEED, player.owner.as_ref()],
@@ -961,4 +1168,184 @@ pub struct BatchCheckPlayersStatus<'info> {
         bump = game_state.bump
     )]
     pub game_state: Account<'info, GameState>,
+}
+
+#[derive(Accounts)]
+pub struct CreateBusinessWithNFT<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == owner.key()
+    )]
+    pub player: Account<'info, Player>,
+
+    #[account(
+        seeds = [GAME_CONFIG_SEED],
+        bump = game_config.bump
+    )]
+    pub game_config: Account<'info, GameConfig>,
+
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+
+    /// Treasury wallet where team fees go
+    /// CHECK: This is validated against game_state.treasury_wallet
+    #[account(mut)]
+    pub treasury_wallet: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds = [TREASURY_SEED],
+        bump = treasury_pda.bump
+    )]
+    pub treasury_pda: Account<'info, Treasury>,
+
+    // 🔧 ИСПРАВЛЕНО: Правильные типы для NFT
+    #[account(
+        init,
+        payer = owner,
+        mint::decimals = 0,
+        mint::authority = owner,
+        mint::freeze_authority = owner
+    )]
+    pub nft_mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = owner,
+        associated_token::mint = nft_mint,
+        associated_token::authority = owner
+    )]
+    pub nft_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        init,
+        payer = owner,
+        space = BusinessNFT::SIZE,
+        seeds = [BUSINESS_NFT_SEED, nft_mint.key().as_ref()],
+        bump
+    )]
+    pub business_nft: Account<'info, BusinessNFT>,
+
+    /// CHECK: This is used for metadata creation
+    #[account(mut)]
+    pub nft_metadata: UncheckedAccount<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub token_metadata_program: Program<'info, Metadata>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct SellBusinessWithNFTBurn<'info> {
+    #[account(mut)]
+    pub player_owner: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == player_owner.key()
+    )]
+    pub player: Account<'info, Player>,
+    
+    #[account(
+        mut,
+        seeds = [TREASURY_SEED],
+        bump = treasury_pda.bump
+    )]
+    pub treasury_pda: Account<'info, Treasury>,
+    
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+
+    // 🔧 ИСПРАВЛЕНО: Правильные типы
+    #[account(mut)]
+    pub nft_mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        associated_token::mint = nft_mint,
+        associated_token::authority = player_owner
+    )]
+    pub nft_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [BUSINESS_NFT_SEED, nft_mint.key().as_ref()],
+        bump = business_nft.bump,
+        constraint = business_nft.player == player_owner.key()
+    )]
+    pub business_nft: Account<'info, BusinessNFT>,
+    
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpgradeBusinessNFT<'info> {
+    #[account(mut)]
+    pub player_owner: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == player_owner.key()
+    )]
+    pub player: Account<'info, Player>,
+    
+    /// Treasury wallet where upgrade fees go
+    /// CHECK: This is validated against game_state.treasury_wallet
+    #[account(
+        mut,
+        address = game_state.treasury_wallet
+    )]
+    pub treasury_wallet: AccountInfo<'info>,
+    
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+    
+    #[account(
+        seeds = [GAME_CONFIG_SEED],
+        bump = game_config.bump
+    )]
+    pub game_config: Account<'info, GameConfig>,
+
+    // 🔧 ИСПРАВЛЕНО: Правильный тип
+    pub nft_mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [BUSINESS_NFT_SEED, nft_mint.key().as_ref()],
+        bump = business_nft.bump,
+        constraint = business_nft.player == player_owner.key()
+    )]
+    pub business_nft: Account<'info, BusinessNFT>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct GetBusinessNFTData<'info> {
+    /// Business NFT account to read data from
+    pub business_nft: Account<'info, BusinessNFT>,
 }

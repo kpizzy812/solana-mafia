@@ -1,6 +1,4 @@
 // constants.rs
-// УБРАЛ неиспользуемый импорт anchor_lang::prelude::*
-
 // ============================================================================
 // PROGRAM CONSTANTS
 // ============================================================================
@@ -10,6 +8,9 @@ pub const GAME_STATE_SEED: &[u8] = b"game_state";
 pub const GAME_CONFIG_SEED: &[u8] = b"game_config";
 pub const TREASURY_SEED: &[u8] = b"treasury";
 pub const PLAYER_SEED: &[u8] = b"player";
+// 🆕 NFT SEEDS
+pub const BUSINESS_NFT_SEED: &[u8] = b"business_nft";
+pub const NFT_METADATA_SEED: &[u8] = b"metadata";
 
 // ============================================================================
 // BUSINESS CONFIGURATION
@@ -32,6 +33,35 @@ pub const MIN_DEPOSITS: [u64; 6] = [
     5_000_000_000, // 5 SOL - MiningFarm
     20_000_000_000, // 20 SOL - DeFiEmpire
     100_000_000_000, // 100 SOL - SolanaCartel
+];
+
+// ============================================================================
+// NFT CONFIGURATION
+// ============================================================================
+
+/// NFT Collection configuration
+pub const NFT_COLLECTION_NAME: &str = "Solana Mafia Business";
+pub const NFT_COLLECTION_SYMBOL: &str = "SMB";
+pub const NFT_COLLECTION_URI: &str = "https://solana-mafia.com/collection.json";
+
+/// Business NFT names
+pub const BUSINESS_NFT_NAMES: [&str; 6] = [
+    "Underground Pharmacy",
+    "Speakeasy Bar", 
+    "Backroom Casino",
+    "Import/Export Business",
+    "Construction Racket",
+    "Money Laundering"
+];
+
+/// Business NFT URIs (будут содержать metadata)
+pub const BUSINESS_NFT_URIS: [&str; 6] = [
+    "https://solana-mafia.com/nft/pharmacy.json",
+    "https://solana-mafia.com/nft/speakeasy.json",
+    "https://solana-mafia.com/nft/casino.json",
+    "https://solana-mafia.com/nft/import.json",
+    "https://solana-mafia.com/nft/construction.json",
+    "https://solana-mafia.com/nft/laundering.json",
 ];
 
 // ============================================================================

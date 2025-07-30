@@ -10,6 +10,9 @@ pub struct GameState {
     pub total_referral_paid: u64,
     pub total_treasury_collected: u64,
     pub total_businesses: u64,
+    pub total_nfts_minted: u64,  // 🆕 Общее количество созданных NFT
+    pub total_nfts_burned: u64,  // 🆕 Общее количество сожженных NFT
+    pub nft_serial_counter: u64, // 🆕 Счетчик для серийных номеров
     pub is_paused: bool,
     pub created_at: i64,
     pub bump: u8,
@@ -26,6 +29,9 @@ impl GameState {
         8 + // total_referral_paid
         8 + // total_treasury_collected
         8 + // total_businesses
+        8 + // total_nfts_minted 
+        8 + // total_nfts_burned 
+        8 + // nft_serial_counter 
         1 + // is_paused
         8 + // created_at
         1; // bump
@@ -46,6 +52,9 @@ impl GameState {
             total_referral_paid: 0,
             total_treasury_collected: 0,
             total_businesses: 0,
+            total_nfts_minted: 0,    
+            total_nfts_burned: 0,    
+            nft_serial_counter: 0,   
             is_paused: false,
             created_at,
             bump,
@@ -85,5 +94,21 @@ impl GameState {
     /// Toggle pause state
     pub fn toggle_pause(&mut self) {
         self.is_paused = !self.is_paused;
+    }
+
+    /// 🆕 Get next NFT serial number
+    pub fn get_next_nft_serial(&mut self) -> u64 {
+        self.nft_serial_counter += 1;
+        self.nft_serial_counter
+    }
+
+    /// 🆕 Add NFT mint
+    pub fn add_nft_mint(&mut self) {
+        self.total_nfts_minted += 1;
+    }
+
+    /// 🆕 Add NFT burn
+    pub fn add_nft_burn(&mut self) {
+        self.total_nfts_burned += 1;
     }
 }

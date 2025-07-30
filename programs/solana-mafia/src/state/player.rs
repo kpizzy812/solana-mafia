@@ -38,7 +38,7 @@ impl Player {
     8 + // first_business_time
     8 + // last_auto_update
     1 + // bump
-    100; // 🔒 БОЛЬШОЙ ЗАПАС
+    300; // 🔒 БОЛЬШОЙ ЗАПАС
 
     /// Create new player
     pub fn new(owner: Pubkey, _referrer: Option<Pubkey>, current_time: i64, bump: u8) -> Self {
