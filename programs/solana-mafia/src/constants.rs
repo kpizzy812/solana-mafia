@@ -56,12 +56,12 @@ pub const BUSINESS_NFT_NAMES: [&str; 6] = [
 
 /// Business NFT URIs (будут содержать metadata)
 pub const BUSINESS_NFT_URIS: [&str; 6] = [
-    "https://solana-mafia.com/nft/pharmacy.json",
-    "https://solana-mafia.com/nft/speakeasy.json",
-    "https://solana-mafia.com/nft/casino.json",
-    "https://solana-mafia.com/nft/import.json",
-    "https://solana-mafia.com/nft/construction.json",
-    "https://solana-mafia.com/nft/laundering.json",
+    "https://httpbin.org/json",
+    "https://httpbin.org/json",
+    "https://httpbin.org/json",
+    "https://httpbin.org/json",
+    "https://httpbin.org/json",
+    "https://httpbin.org/json",
 ];
 
 // ============================================================================
@@ -74,7 +74,7 @@ pub const TREASURY_FEE_PERCENT: u8 = 20; // 20%
 
 /// Early sell fees by days held (index = days, value = fee percent)
 pub const EARLY_SELL_FEES: [u8; 32] = [
-    20, 20, 20, 20, 20, 20, 20, // Days 0-6: 20%
+    0, 0, 0, 0, 0, 0, 0, // Days 0-6: 20%
     15, 15, 15, 15, 15, 15, 15, // Days 7-13: 15%
     10, 10, 10, 10, 10, 10, 10, // Days 14-20: 10%
     7,  7,  7,  7,  7,  7,  7,  // Days 21-27: 7%

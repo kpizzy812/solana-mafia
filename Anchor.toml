@@ -7,10 +7,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-solana_mafia = "Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU"
+solana_mafia = "3Ly6bEWRfKyVGwrRN27gHhBogo1K4HbZyk69KHW9AUx7"
 
 [programs.localnet]
-solana_mafia = "Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU"
+solana_mafia = "3Ly6bEWRfKyVGwrRN27gHhBogo1K4HbZyk69KHW9AUx7"
 
 [registry]
 url = "https://api.apr.dev"

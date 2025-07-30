@@ -136,7 +136,7 @@ pub struct GlobalStats {
     pub total_treasury_collected: u64,
 }
 
-declare_id!("Hnyyopg1fsQGY1JqEsp8CPZk1KjDKsAoosBJJi5ZpegU");
+declare_id!("3Ly6bEWRfKyVGwrRN27gHhBogo1K4HbZyk69KHW9AUx7");
 
 #[program]
 pub mod solana_mafia {
