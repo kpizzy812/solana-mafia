@@ -20,4 +20,5 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn run mocha -t 1000000 tests/"
+test-all = "yarn run mocha -t 1000000 tests/"
+test-validator = "anchor test"
