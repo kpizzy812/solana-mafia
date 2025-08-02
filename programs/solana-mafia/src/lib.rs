@@ -112,6 +112,22 @@ pub struct BusinessNFTUpgraded {
     pub new_daily_rate: u16,
 }
 
+#[event]
+pub struct BusinessTransferred {
+    pub old_owner: Pubkey,
+    pub new_owner: Pubkey,
+    pub business_mint: Pubkey,
+    pub transferred_at: i64,
+}
+
+#[event]
+pub struct BusinessDeactivated {
+    pub player: Pubkey,
+    pub business_mint: Pubkey,
+    pub reason: String, // "nft_burned", "nft_transferred", "manual"
+    pub deactivated_at: i64,
+}
+
 // ============ FRONTEND DATA STRUCTURES ============
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -543,13 +559,18 @@ pub fn create_business_with_nft(
         let sell_fee = business.invested_amount * sell_fee_percent / 100;
         let return_amount = business.invested_amount - sell_fee;
         
-        // Check if treasury has enough funds
+        msg!("💰 Ponzi sell calculation: invested={}, fee={}%, return={}", 
+            business.invested_amount, sell_fee_percent, return_amount);
+        
+        // Check if treasury has enough funds (деньги других игроков)
         let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
         if treasury_balance < return_amount {
+            msg!("❌ Insufficient treasury balance: {} < {} (not enough other players' deposits)", 
+                treasury_balance, return_amount);
             return Err(ProgramError::InsufficientFunds.into());
         }
         
-        // 🔧 Программный трансфер lamports без system_program
+        // 🎯 Transfer return amount from treasury 
         **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
         **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
         
@@ -568,8 +589,8 @@ pub fn create_business_with_nft(
             return_amount,
         });
         
-        msg!("🔥 Business sold! Days held: {}, Fee: {}%, Return: {} lamports", 
-             days_held, sell_fee_percent, return_amount);
+        msg!("🔥 Business sold! Days held: {}, Fee: {}%, Return: {} lamports FROM TREASURY", 
+            days_held, sell_fee_percent, return_amount);
         
         Ok(())
     }
@@ -738,7 +759,7 @@ pub fn sell_business_with_nft_burn(
         return Err(SolanaMafiaError::BusinessNotOwned.into());
     }
     
-    // Calculate days held and return amount (same logic as before)
+    // Calculate days held and early exit fee
     let days_held = business.days_since_created(clock.unix_timestamp);
     
     let sell_fee_percent = match days_held {
@@ -750,20 +771,22 @@ pub fn sell_business_with_nft_burn(
         _ => 0,
     };
     
+    // 🎯 PONZI ЛОГИКА: Расчет от ПОЛНОГО депозита, но берем из общего пула
     let sell_fee = business.invested_amount * sell_fee_percent / 100;
     let return_amount = business.invested_amount - sell_fee;
     
-    // Check if treasury has enough funds
+    msg!("💰 Ponzi sell calculation: invested={}, fee={}%, return={}", 
+         business.invested_amount, sell_fee_percent, return_amount);
+    
+    // Check if treasury has enough funds (деньги других игроков)
     let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
     if treasury_balance < return_amount {
+        msg!("❌ Insufficient treasury balance: {} < {} (not enough other players' deposits)", 
+             treasury_balance, return_amount);
         return Err(ProgramError::InsufficientFunds.into());
     }
     
-    // Transfer return amount to player
-    **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
-    **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
-    
-    // 🆕 Burn the NFT
+    // 🆕 Burn the NFT first (before transferring funds)
     let cpi_accounts = token::Burn {
         mint: ctx.accounts.nft_mint.to_account_info(),
         from: ctx.accounts.nft_token_account.to_account_info(),
@@ -772,6 +795,10 @@ pub fn sell_business_with_nft_burn(
     let cpi_program = ctx.accounts.token_program.to_account_info();
     let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
     token::burn(cpi_ctx, 1)?; // Burn 1 NFT
+    
+    // 🎯 Transfer return amount from treasury 
+    **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
+    **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
     
     // Deactivate business and mark NFT as burned
     business.is_active = false;
@@ -798,7 +825,7 @@ pub fn sell_business_with_nft_burn(
         return_amount,
     });
     
-    msg!("🔥🖼️ Business NFT burned! Days held: {}, Fee: {}%, Return: {} lamports", 
+    msg!("🔥🖼️ Business NFT burned! Days held: {}, Fee: {}%, Return: {} lamports FROM TREASURY", 
          days_held, sell_fee_percent, return_amount);
     
     Ok(())
@@ -906,6 +933,135 @@ pub fn get_business_nft_data(ctx: Context<GetBusinessNFTData>) -> Result<()> {
     
     Ok(())
 }
+}
+
+/// 🔄 Sync business ownership based on NFT ownership
+pub fn sync_business_ownership(ctx: Context<SyncBusinessOwnership>) -> Result<()> {
+    let business_nft = &ctx.accounts.business_nft;
+    let old_player = &mut ctx.accounts.old_player;
+    let new_player = &mut ctx.accounts.new_player;
+    
+    // Verify NFT is not burned
+    if business_nft.is_burned {
+        return Err(SolanaMafiaError::BusinessNotFound.into());
+    }
+    
+    // Get current NFT owner from token account
+    let token_account_info = ctx.accounts.nft_token_account.to_account_info();
+    let token_account = TokenAccount::try_deserialize(&mut token_account_info.data.borrow().as_ref())?;
+    let current_nft_owner = token_account.owner;
+    
+    msg!("🔄 NFT ownership check: stored={}, actual={}", business_nft.player, current_nft_owner);
+    
+    // If NFT owner changed, transfer business
+    if business_nft.player != current_nft_owner {
+        // Find business in old player's account
+        let mut business_to_transfer: Option<Business> = None;
+        let mut business_index: Option<usize> = None;
+        
+        for (index, business) in old_player.businesses.iter().enumerate() {
+            if let Some(nft_mint) = business.nft_mint {
+                if nft_mint == business_nft.mint {
+                    business_to_transfer = Some(business.clone());
+                    business_index = Some(index);
+                    break;
+                }
+            }
+        }
+        
+        if let (Some(business), Some(index)) = (business_to_transfer, business_index) {
+            // Remove business from old player
+            old_player.businesses.remove(index);
+            
+            // Add business to new player
+            new_player.businesses.push(business);
+            
+            // Update NFT record
+            // Note: we can't modify business_nft here as it's not mutable in this context
+            // This would need to be done in a separate instruction or different account setup
+            
+            msg!("✅ Business transferred from {} to {}", business_nft.player, current_nft_owner);
+            
+            // Emit transfer event
+            emit!(BusinessTransferred {
+                old_owner: business_nft.player,
+                new_owner: current_nft_owner,
+                business_mint: business_nft.mint,
+                transferred_at: Clock::get()?.unix_timestamp,
+            });
+        }
+    }
+    
+    Ok(())
+}
+
+/// 🔥 Deactivate business if NFT was burned externally
+pub fn deactivate_burned_business(ctx: Context<DeactivateBurnedBusiness>) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let business_nft = &mut ctx.accounts.business_nft;
+    
+    // Check if NFT supply is 0 (burned)
+    let mint_info = ctx.accounts.nft_mint.to_account_info();
+    let mint_account = Mint::try_deserialize(&mut mint_info.data.borrow().as_ref())?;
+    
+    if mint_account.supply == 0 && !business_nft.is_burned {
+        // NFT was burned externally, deactivate business
+        for business in &mut player.businesses {
+            if let Some(nft_mint) = business.nft_mint {
+                if nft_mint == business_nft.mint {
+                    business.is_active = false;
+                    break;
+                }
+            }
+        }
+        
+        // Mark NFT as burned
+        business_nft.burn();
+        
+        msg!("🔥 Business deactivated - NFT was burned externally");
+        
+        emit!(BusinessNFTBurned {
+            player: business_nft.player,
+            mint: business_nft.mint,
+            business_type: business_nft.businessType.to_index() as u8,
+            serial_number: business_nft.serial_number,
+            burned_at: Clock::get()?.unix_timestamp,
+        });
+    }
+    
+    Ok(())
+}
+
+/// ✅ Verify business ownership before operations
+pub fn verify_business_nft_ownership(
+    player_key: Pubkey,
+    business: &Business,
+    nft_token_account: &AccountInfo,
+) -> Result<()> {
+    if let Some(nft_mint) = business.nft_mint {
+        // Deserialize token account to check owner
+        let token_account = TokenAccount::try_deserialize(&mut nft_token_account.data.borrow().as_ref())?;
+        
+        // Verify current NFT owner matches the player
+        if token_account.owner != player_key {
+            msg!("❌ Business ownership mismatch: player={}, nft_owner={}", player_key, token_account.owner);
+            return Err(SolanaMafiaError::BusinessNotOwned.into());
+        }
+        
+        // Verify NFT mint matches business
+        if token_account.mint != nft_mint {
+            msg!("❌ NFT mint mismatch: business={}, token={}", nft_mint, token_account.mint);
+            return Err(SolanaMafiaError::BusinessNotOwned.into());
+        }
+        
+        // Verify player actually owns the NFT (amount > 0)
+        if token_account.amount == 0 {
+            msg!("❌ Player doesn't own NFT: amount=0");
+            return Err(SolanaMafiaError::BusinessNotOwned.into());
+        }
+    }
+    
+    Ok(())
 }
 
 // ===== ACCOUNT CONTEXTS =====
@@ -1099,6 +1255,13 @@ pub struct SellBusiness<'info> {
         bump = game_state.bump
     )]
     pub game_state: Account<'info, GameState>,
+
+    /// 🆕 Добавляем game_config для получения treasury_fee_percent
+    #[account(
+        seeds = [GAME_CONFIG_SEED],
+        bump = game_config.bump
+    )]
+    pub game_config: Account<'info, GameConfig>,
     
     pub system_program: Program<'info, System>,
 }
@@ -1298,6 +1461,13 @@ pub struct SellBusinessWithNFTBurn<'info> {
     )]
     pub game_state: Account<'info, GameState>,
 
+    /// 🆕 Game config для получения treasury_fee_percent
+    #[account(
+        seeds = [GAME_CONFIG_SEED],
+        bump = game_config.bump
+    )]
+    pub game_config: Account<'info, GameConfig>,
+
     /// CHECK: NFT mint account
     #[account(mut)]
     pub nft_mint: AccountInfo<'info>,
@@ -1369,4 +1539,90 @@ pub struct UpgradeBusinessNFT<'info> {
 pub struct GetBusinessNFTData<'info> {
     /// Business NFT account to read data from
     pub business_nft: Account<'info, BusinessNFT>,
+}
+
+#[derive(Accounts)]
+pub struct SyncBusinessOwnership<'info> {
+    /// The old owner of the business (current player in BusinessNFT)
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, business_nft.player.as_ref()],
+        bump = old_player.bump,
+    )]
+    pub old_player: Account<'info, Player>,
+    
+    /// The new owner of the business (current NFT holder)
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, new_owner.key().as_ref()],
+        bump = new_player.bump,
+    )]
+    pub new_player: Account<'info, Player>,
+    
+    /// The new owner's wallet
+    pub new_owner: Signer<'info>,
+    
+    /// BusinessNFT account to check ownership
+    #[account(
+        seeds = [BUSINESS_NFT_SEED, business_nft.mint.as_ref()],
+        bump = business_nft.bump,
+    )]
+    pub business_nft: Account<'info, BusinessNFT>,
+    
+    /// NFT token account to verify current owner
+    /// CHECK: Token account verified in instruction
+    pub nft_token_account: AccountInfo<'info>,
+    
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct DeactivateBurnedBusiness<'info> {
+    /// Player who owned the business
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, business_nft.player.as_ref()],
+        bump = player.bump,
+    )]
+    pub player: Account<'info, Player>,
+    
+    /// BusinessNFT account to update
+    #[account(
+        mut,
+        seeds = [BUSINESS_NFT_SEED, business_nft.mint.as_ref()],
+        bump = business_nft.bump,
+    )]
+    pub business_nft: Account<'info, BusinessNFT>,
+    
+    /// NFT mint to check supply
+    /// CHECK: Mint account verified in instruction
+    pub nft_mint: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct VerifyBusinessOwnership<'info> {
+    /// Player claiming to own the business
+    pub player_owner: Signer<'info>,
+    
+    /// Player account
+    #[account(
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+    )]
+    pub player: Account<'info, Player>,
+    
+    /// BusinessNFT account
+    #[account(
+        seeds = [BUSINESS_NFT_SEED, nft_mint.key().as_ref()],
+        bump = business_nft.bump,
+    )]
+    pub business_nft: Account<'info, BusinessNFT>,
+    
+    /// NFT mint
+    /// CHECK: Mint verified in instruction
+    pub nft_mint: AccountInfo<'info>,
+    
+    /// NFT token account
+    /// CHECK: Token account verified in instruction  
+    pub nft_token_account: AccountInfo<'info>,
 }

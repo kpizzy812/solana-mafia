@@ -299,6 +299,10 @@ describe("🖼️ Solana Mafia - NFT Functions", () => {
         console.log(`🎯 Selling business index: ${businessIndex}`);
         console.log(`🏪 Total businesses: ${playerAccount.businesses.length}`);
   
+        // Check treasury balance before sale
+        const treasuryBefore = await provider.connection.getBalance(treasuryPda);
+        console.log(`💰 Treasury balance before: ${treasuryBefore} lamports`);
+  
         const txSignature = await program.methods
           .sellBusinessWithNftBurn(businessIndex)
           .accounts({
@@ -306,6 +310,7 @@ describe("🖼️ Solana Mafia - NFT Functions", () => {
             player: playerPda,
             treasuryPda: treasuryPda,
             gameState: gameStatePda,
+            gameConfig: gameConfigPda, // 🆕 Добавляем game_config
             nftMint: nftMint.publicKey,
             nftTokenAccount: nftTokenAccount,
             businessNft: businessNftPda,
@@ -315,6 +320,11 @@ describe("🖼️ Solana Mafia - NFT Functions", () => {
           .rpc();
   
         console.log(`✅ Business sold and NFT burned! TX: ${txSignature}`);
+  
+        // Check treasury balance after sale
+        const treasuryAfter = await provider.connection.getBalance(treasuryPda);
+        console.log(`💰 Treasury balance after: ${treasuryAfter} lamports`);
+        console.log(`📉 Treasury difference: ${treasuryBefore - treasuryAfter} lamports`);
   
         // Verify NFT is marked as burned
         const businessNftAccount = await program.account.businessNft.fetch(businessNftPda);
