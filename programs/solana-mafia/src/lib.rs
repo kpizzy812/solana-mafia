@@ -232,225 +232,212 @@ pub mod solana_mafia {
     }
 
     /// Create business with NFT (requires existing player)
-    pub fn create_business_with_nft(
-        ctx: Context<CreateBusinessWithNFT>,
-        business_type: u8,
-        deposit_amount: u64,
-    ) -> Result<()> {
-        let game_config = &ctx.accounts.game_config;
-        let game_state = &mut ctx.accounts.game_state;
-        let player = &mut ctx.accounts.player;
-        let clock = Clock::get()?;
-        
-        // Validate business logic (same as before)
-        if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
-            return Err(SolanaMafiaError::UnauthorizedAdmin.into());
-        }
-        
-        if business_type as usize >= BUSINESS_TYPES_COUNT {
-            return Err(SolanaMafiaError::InvalidBusinessType.into());
-        }
-        
-        let daily_rate = game_config.get_business_rate(business_type as usize);
-        let min_deposit = game_config.get_min_deposit(business_type as usize);
-        
-        if deposit_amount < min_deposit {
-            return Err(SolanaMafiaError::InsufficientDeposit.into());
-        }
-        
-        if player.businesses.len() >= MAX_BUSINESSES_PER_PLAYER as usize {
-            return Err(SolanaMafiaError::MaxBusinessesReached.into());
-        }
-        
-        // Transfer funds (same as before)
-        let treasury_fee = deposit_amount * game_config.treasury_fee_percent as u64 / 100;
-        let game_pool_amount = deposit_amount - treasury_fee;
-        
-        system_program::transfer(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.owner.to_account_info(),
-                    to: ctx.accounts.treasury_wallet.to_account_info(),
-                },
-            ),
-            treasury_fee,
-        )?;
-        
-        system_program::transfer(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.owner.to_account_info(),
-                    to: ctx.accounts.treasury_pda.to_account_info(),
-                },
-            ),
-            game_pool_amount,
-        )?;
-
-        // 🔧 РУЧНАЯ инициализация NFT mint
-        let mint_rent = ctx.accounts.rent.minimum_balance(82); // Mint account size
-        
-        // Create mint account
-        system_program::create_account(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::CreateAccount {
-                    from: ctx.accounts.owner.to_account_info(),
-                    to: ctx.accounts.nft_mint.to_account_info(),
-                },
-            ),
-            mint_rent,
-            82,
-            &ctx.accounts.token_program.key(),
-        )?;
-        
-        // Initialize mint
-        let init_mint_ctx = CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            anchor_spl::token::InitializeMint {
-                mint: ctx.accounts.nft_mint.to_account_info(),
-                rent: ctx.accounts.rent.to_account_info(),
-            },
-        );
-        anchor_spl::token::initialize_mint(
-            init_mint_ctx,
-            0, // decimals
-            &ctx.accounts.owner.key(),
-            Some(&ctx.accounts.owner.key()),
-        )?;
-
-        // 🔧 РУЧНАЯ инициализация token account
-        let token_rent = ctx.accounts.rent.minimum_balance(165); // Token account size
-        
-        system_program::create_account(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::CreateAccount {
-                    from: ctx.accounts.owner.to_account_info(),
-                    to: ctx.accounts.nft_token_account.to_account_info(),
-                },
-            ),
-            token_rent,
-            165,
-            &ctx.accounts.token_program.key(),
-        )?;
-        
-        // Initialize token account
-        let init_token_ctx = CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            anchor_spl::token::InitializeAccount {
-                account: ctx.accounts.nft_token_account.to_account_info(),
-                mint: ctx.accounts.nft_mint.to_account_info(),
-                authority: ctx.accounts.owner.to_account_info(),
-                rent: ctx.accounts.rent.to_account_info(),
-            },
-        );
-        anchor_spl::token::initialize_account(init_token_ctx)?;
-
-        // Mint NFT
-        let cpi_accounts = MintTo {
-            mint: ctx.accounts.nft_mint.to_account_info(),
-            to: ctx.accounts.nft_token_account.to_account_info(),
-            authority: ctx.accounts.owner.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        token::mint_to(cpi_ctx, 1)?;
-
-        // Create metadata (same as before)
-        let business_enum = BusinessType::from_index(business_type).unwrap();
-        let serial_number = game_state.get_next_nft_serial();
-        
-        let nft_name = format!("{} #{}", BUSINESS_NFT_NAMES[business_type as usize], serial_number);
-        let nft_uri = BUSINESS_NFT_URIS[business_type as usize].to_string();
-        
-        let data_v2 = DataV2 {
-            name: nft_name,
-            symbol: NFT_COLLECTION_SYMBOL.to_string(),
-            uri: nft_uri,
-            seller_fee_basis_points: 0,
-            creators: Some(vec![Creator {
-                address: ctx.accounts.owner.key(),
-                verified: false,
-                share: 100,
-            }]),
-            collection: None,
-            uses: None,
-        };
-
-        let metadata_ctx = CpiContext::new(
-            ctx.accounts.token_metadata_program.to_account_info(),
-            CreateMetadataAccountsV3 {
-                metadata: ctx.accounts.nft_metadata.to_account_info(),
-                mint: ctx.accounts.nft_mint.to_account_info(),
-                mint_authority: ctx.accounts.owner.to_account_info(),
-                update_authority: ctx.accounts.owner.to_account_info(),
-                payer: ctx.accounts.owner.to_account_info(),
-                system_program: ctx.accounts.system_program.to_account_info(),
-                rent: ctx.accounts.rent.to_account_info(),
-            },
-        );
-
-        create_metadata_accounts_v3(metadata_ctx, data_v2, true, true, None)?;
-
-        // Rest of the business logic (same as before)
-        let mut business = Business::new(
-            business_enum,
-            deposit_amount,
-            daily_rate,
-            clock.unix_timestamp,
-        );
-        business.set_nft_mint(ctx.accounts.nft_mint.key());
-        
-        let business_nft = &mut ctx.accounts.business_nft;
-        **business_nft = BusinessNFT::new(
-            ctx.accounts.owner.key(),
-            business_enum,
-            ctx.accounts.nft_mint.key(),
-            ctx.accounts.nft_token_account.key(),
-            deposit_amount,
-            daily_rate,
-            clock.unix_timestamp,
-            serial_number,
-            ctx.bumps.business_nft,
-        );
-        
-        player.add_business(business)?;
-        
-        game_state.add_investment(deposit_amount);
-        game_state.add_treasury_collection(treasury_fee);
-        game_state.add_business();
-        game_state.add_nft_mint();
-        
-        if player.businesses.len() == 1 {
-            let player_seed = ctx.accounts.owner.key().to_bytes()[0] as u64;
-            player.set_earnings_schedule(clock.unix_timestamp, player_seed)?;
-        }
-
-        emit!(BusinessNFTMinted {
-            player: ctx.accounts.owner.key(),
-            business_type,
-            mint: ctx.accounts.nft_mint.key(),
-            serial_number,
-            invested_amount: deposit_amount,
-            daily_rate,
-            created_at: clock.unix_timestamp,
-        });
-
-        emit!(BusinessCreated {
-            player: ctx.accounts.owner.key(),
-            business_type,
-            invested_amount: deposit_amount,
-            daily_rate,
-            treasury_fee,
-            created_at: clock.unix_timestamp,
-        });
-
-        msg!("🏪🖼️ Business NFT created! Type: {}, Investment: {} lamports, Serial: {}", 
-            business_type, deposit_amount, serial_number);
-        Ok(())
+pub fn create_business_with_nft(
+    ctx: Context<CreateBusinessWithNFT>,
+    business_type: u8,
+    deposit_amount: u64,
+) -> Result<()> {
+    let game_config = &ctx.accounts.game_config;
+    let game_state = &mut ctx.accounts.game_state;
+    let player = &mut ctx.accounts.player;
+    let clock = Clock::get()?;
+    
+    // Validate business logic (same as before)
+    if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
+        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
     }
+    
+    if business_type as usize >= BUSINESS_TYPES_COUNT {
+        return Err(SolanaMafiaError::InvalidBusinessType.into());
+    }
+    
+    let daily_rate = game_config.get_business_rate(business_type as usize);
+    let min_deposit = game_config.get_min_deposit(business_type as usize);
+    
+    if deposit_amount < min_deposit {
+        return Err(SolanaMafiaError::InsufficientDeposit.into());
+    }
+    
+    if player.businesses.len() >= MAX_BUSINESSES_PER_PLAYER as usize {
+        return Err(SolanaMafiaError::MaxBusinessesReached.into());
+    }
+    
+    // Transfer funds (same as before)
+    let treasury_fee = deposit_amount * game_config.treasury_fee_percent as u64 / 100;
+    let game_pool_amount = deposit_amount - treasury_fee;
+    
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.owner.to_account_info(),
+                to: ctx.accounts.treasury_wallet.to_account_info(),
+            },
+        ),
+        treasury_fee,
+    )?;
+    
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.owner.to_account_info(),
+                to: ctx.accounts.treasury_pda.to_account_info(),
+            },
+        ),
+        game_pool_amount,
+    )?;
+
+    // 🔧 Create NFT mint manually (same as before)
+    let mint_rent = ctx.accounts.rent.minimum_balance(82); // Mint account size
+    
+    // Create mint account
+    system_program::create_account(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::CreateAccount {
+                from: ctx.accounts.owner.to_account_info(),
+                to: ctx.accounts.nft_mint.to_account_info(),
+            },
+        ),
+        mint_rent,
+        82,
+        &ctx.accounts.token_program.key(),
+    )?;
+    
+    // Initialize mint
+    let init_mint_ctx = CpiContext::new(
+        ctx.accounts.token_program.to_account_info(),
+        anchor_spl::token::InitializeMint {
+            mint: ctx.accounts.nft_mint.to_account_info(),
+            rent: ctx.accounts.rent.to_account_info(),
+        },
+    );
+    anchor_spl::token::initialize_mint(
+        init_mint_ctx,
+        0, // decimals
+        &ctx.accounts.owner.key(),
+        Some(&ctx.accounts.owner.key()),
+    )?;
+
+    // 🔧 Create Associated Token Account properly
+    anchor_spl::associated_token::create(
+        CpiContext::new(
+            ctx.accounts.associated_token_program.to_account_info(),
+            anchor_spl::associated_token::Create {
+                payer: ctx.accounts.owner.to_account_info(),
+                associated_token: ctx.accounts.nft_token_account.to_account_info(),
+                authority: ctx.accounts.owner.to_account_info(),
+                mint: ctx.accounts.nft_mint.to_account_info(),
+                system_program: ctx.accounts.system_program.to_account_info(),
+                token_program: ctx.accounts.token_program.to_account_info(),
+            },
+        ),
+    )?;
+
+    // Mint NFT
+    let cpi_accounts = MintTo {
+        mint: ctx.accounts.nft_mint.to_account_info(),
+        to: ctx.accounts.nft_token_account.to_account_info(),
+        authority: ctx.accounts.owner.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    token::mint_to(cpi_ctx, 1)?;
+
+    // Create metadata (same as before)
+    let business_enum = BusinessType::from_index(business_type).unwrap();
+    let serial_number = game_state.get_next_nft_serial();
+    
+    let nft_name = format!("{} #{}", BUSINESS_NFT_NAMES[business_type as usize], serial_number);
+    let nft_uri = BUSINESS_NFT_URIS[business_type as usize].to_string();
+    
+    let data_v2 = DataV2 {
+        name: nft_name,
+        symbol: NFT_COLLECTION_SYMBOL.to_string(),
+        uri: nft_uri,
+        seller_fee_basis_points: 0,
+        creators: Some(vec![Creator {
+            address: ctx.accounts.owner.key(),
+            verified: false,
+            share: 100,
+        }]),
+        collection: None,
+        uses: None,
+    };
+
+    let metadata_ctx = CpiContext::new(
+        ctx.accounts.token_metadata_program.to_account_info(),
+        CreateMetadataAccountsV3 {
+            metadata: ctx.accounts.nft_metadata.to_account_info(),
+            mint: ctx.accounts.nft_mint.to_account_info(),
+            mint_authority: ctx.accounts.owner.to_account_info(),
+            update_authority: ctx.accounts.owner.to_account_info(),
+            payer: ctx.accounts.owner.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
+            rent: ctx.accounts.rent.to_account_info(),
+        },
+    );
+
+    create_metadata_accounts_v3(metadata_ctx, data_v2, true, true, None)?;
+
+    // Rest of the business logic (same as before)
+    let mut business = Business::new(
+        business_enum,
+        deposit_amount,
+        daily_rate,
+        clock.unix_timestamp,
+    );
+    business.set_nft_mint(ctx.accounts.nft_mint.key());
+    
+    let business_nft = &mut ctx.accounts.business_nft;
+    **business_nft = BusinessNFT::new(
+        ctx.accounts.owner.key(),
+        business_enum,
+        ctx.accounts.nft_mint.key(),
+        ctx.accounts.nft_token_account.key(),
+        deposit_amount,
+        daily_rate,
+        clock.unix_timestamp,
+        serial_number,
+        ctx.bumps.business_nft,
+    );
+    
+    player.add_business(business)?;
+    
+    game_state.add_investment(deposit_amount);
+    game_state.add_treasury_collection(treasury_fee);
+    game_state.add_business();
+    game_state.add_nft_mint();
+    
+    if player.businesses.len() == 1 {
+        let player_seed = ctx.accounts.owner.key().to_bytes()[0] as u64;
+        player.set_earnings_schedule(clock.unix_timestamp, player_seed)?;
+    }
+
+    emit!(BusinessNFTMinted {
+        player: ctx.accounts.owner.key(),
+        business_type,
+        mint: ctx.accounts.nft_mint.key(),
+        serial_number,
+        invested_amount: deposit_amount,
+        daily_rate,
+        created_at: clock.unix_timestamp,
+    });
+
+    emit!(BusinessCreated {
+        player: ctx.accounts.owner.key(),
+        business_type,
+        invested_amount: deposit_amount,
+        daily_rate,
+        treasury_fee,
+        created_at: clock.unix_timestamp,
+    });
+
+    msg!("🏪🖼️ Business NFT created! Type: {}, Investment: {} lamports, Serial: {}", 
+        business_type, deposit_amount, serial_number);
+    Ok(())
+}
 
     /// Update earnings (owner only)
     pub fn update_earnings(ctx: Context<UpdateEarnings>) -> Result<()> {
@@ -1259,7 +1246,8 @@ pub struct CreateBusinessWithNFT<'info> {
     #[account(mut)]
     pub nft_mint: Signer<'info>,
 
-    /// CHECK: NFT token account, will be initialized in instruction
+    /// The associated token account for the NFT
+    /// CHECK: ATA will be created by Associated Token Program
     #[account(mut)]
     pub nft_token_account: AccountInfo<'info>,
 
