@@ -1076,6 +1076,77 @@ pub fn verify_business_nft_ownership(
     Ok(())
 }
 
+/// 🔄 Автоматическая синхронизация ownership бизнесов
+pub fn auto_sync_business_ownership(ctx: Context<AutoSyncBusinessOwnership>) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let ownership_status = verify_all_nft_ownership(
+        &ctx.remaining_accounts, 
+        &player.businesses, 
+        ctx.accounts.player_owner.key()
+    )?;
+    
+    let mut businesses_deactivated = 0u8;
+    
+    // Деактивируем бизнесы, NFT которых больше не принадлежат игроку
+    for (index, owns_nft) in ownership_status.iter().enumerate() {
+        if let Some(business) = player.businesses.get_mut(index) {
+            if business.is_active && business.nft_mint.is_some() && !owns_nft {
+                business.is_active = false;
+                businesses_deactivated += 1;
+                
+                msg!("🔄 Deactivated business {} - NFT no longer owned", index);
+                
+                emit!(BusinessDeactivated {
+                    player: ctx.accounts.player_owner.key(),
+                    business_mint: business.nft_mint.unwrap(),
+                    reason: "nft_transferred".to_string(),
+                    deactivated_at: Clock::get()?.unix_timestamp,
+                });
+            }
+        }
+    }
+    
+    if businesses_deactivated > 0 {
+        msg!("✅ Synchronized {} businesses based on NFT ownership", businesses_deactivated);
+    } else {
+        msg!("✅ All businesses ownership verified - no changes needed");
+    }
+    
+    Ok(())
+}
+
+/// 🆕 Получить только валидные (принадлежащие) бизнесы игрока
+pub fn get_valid_player_businesses(ctx: Context<GetValidPlayerBusinesses>) -> Result<()> {
+    let player = &ctx.accounts.player;
+    let valid_indices = verify_and_filter_owned_businesses(
+        &ctx.remaining_accounts, 
+        &player.businesses, 
+        player.owner
+    )?;
+    
+    msg!("VALID_BUSINESSES: player={}, total={}, valid={}, indices={:?}", 
+         player.owner, 
+         player.businesses.len(), 
+         valid_indices.len(),
+         valid_indices
+    );
+    
+    // Логируем детали каждого валидного бизнеса
+    for &index in &valid_indices {
+        if let Some(business) = player.businesses.get(index) {
+            msg!("BUSINESS_{}: type={}, invested={}, active={}, has_nft={}", 
+                 index,
+                 business.business_type.to_index(),
+                 business.invested_amount,
+                 business.is_active,
+                 business.nft_mint.is_some()
+            );
+        }
+    }
+    
+    Ok(())
+}
+
 
 // ===== ACCOUNT CONTEXTS =====
 
