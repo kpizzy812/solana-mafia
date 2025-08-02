@@ -8,7 +8,7 @@ pub struct BusinessNFT {
     pub business_type: BusinessType, // Тип бизнеса
     pub mint: Pubkey,             // NFT mint address
     pub token_account: Pubkey,    // Token account владельца
-    pub invested_amount: u64,     // Сумма инвестиций
+    pub total_invested_amount: u64, // 🆕 Общая сумма инвестиций (база + улучшения)
     pub daily_rate: u16,          // Дневная ставка
     pub upgrade_level: u8,        // Уровень апгрейда
     pub created_at: i64,          // Время создания
@@ -23,7 +23,7 @@ impl BusinessNFT {
         1 +  // business_type
         32 + // mint
         32 + // token_account
-        8 +  // invested_amount
+        8 +  // total_invested_amount
         2 +  // daily_rate
         1 +  // upgrade_level
         8 +  // created_at
@@ -36,7 +36,7 @@ impl BusinessNFT {
         business_type: BusinessType,
         mint: Pubkey,
         token_account: Pubkey,
-        invested_amount: u64,
+        total_invested_amount: u64,
         daily_rate: u16,
         created_at: i64,
         serial_number: u64,
@@ -47,7 +47,7 @@ impl BusinessNFT {
             business_type,
             mint,
             token_account,
-            invested_amount,
+            total_invested_amount,
             daily_rate,
             upgrade_level: 0,
             created_at,
