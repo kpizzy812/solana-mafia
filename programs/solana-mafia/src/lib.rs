@@ -470,8 +470,8 @@ pub fn create_business_with_nft(
         Ok(())
     }
 
-    /// Claim earnings with safety checks
-    pub fn claim_earnings(ctx: Context<ClaimEarnings>) -> Result<()> {
+    /// Claim earnings with NFT ownership verification
+    pub fn claim_earnings(ctx: Context<ClaimEarningsWithNFTCheck>) -> Result<()> {
         let player = &mut ctx.accounts.player;
         let game_state = &mut ctx.accounts.game_state;
         let clock = Clock::get()?;
@@ -494,7 +494,7 @@ pub fn create_business_with_nft(
             return Err(ProgramError::InsufficientFunds.into());
         }
         
-        // 🔧 ИСПРАВЛЕНО: Программный трансфер lamports без system_program
+        // Transfer lamports from treasury to player
         **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= claimable_amount;
         **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += claimable_amount;
         
@@ -504,7 +504,6 @@ pub fn create_business_with_nft(
         // Update game statistics
         game_state.add_withdrawal(claimable_amount);
 
-        // 🆕 Эмиттим event
         emit!(EarningsClaimed {
             player: ctx.accounts.player_owner.key(),
             amount: claimable_amount,
@@ -945,7 +944,7 @@ pub fn get_business_nft_data(ctx: Context<GetBusinessNFTData>) -> Result<()> {
     
     Ok(())
 }
-}
+
 
 /// 🔄 Sync business ownership based on NFT ownership
 pub fn sync_business_ownership(ctx: Context<SyncBusinessOwnership>) -> Result<()> {
@@ -1044,38 +1043,6 @@ pub fn deactivate_burned_business(ctx: Context<DeactivateBurnedBusiness>) -> Res
     Ok(())
 }
 
-/// ✅ Verify business ownership before operations
-pub fn verify_business_nft_ownership(
-    player_key: Pubkey,
-    business: &Business,
-    nft_token_account: &AccountInfo,
-) -> Result<()> {
-    if let Some(nft_mint) = business.nft_mint {
-        // Deserialize token account to check owner
-        let token_account = TokenAccount::try_deserialize(&mut nft_token_account.data.borrow().as_ref())?;
-        
-        // Verify current NFT owner matches the player
-        if token_account.owner != player_key {
-            msg!("❌ Business ownership mismatch: player={}, nft_owner={}", player_key, token_account.owner);
-            return Err(SolanaMafiaError::BusinessNotOwned.into());
-        }
-        
-        // Verify NFT mint matches business
-        if token_account.mint != nft_mint {
-            msg!("❌ NFT mint mismatch: business={}, token={}", nft_mint, token_account.mint);
-            return Err(SolanaMafiaError::BusinessNotOwned.into());
-        }
-        
-        // Verify player actually owns the NFT (amount > 0)
-        if token_account.amount == 0 {
-            msg!("❌ Player doesn't own NFT: amount=0");
-            return Err(SolanaMafiaError::BusinessNotOwned.into());
-        }
-    }
-    
-    Ok(())
-}
-
 /// 🔄 Автоматическая синхронизация ownership бизнесов
 pub fn auto_sync_business_ownership(ctx: Context<AutoSyncBusinessOwnership>) -> Result<()> {
     let player = &mut ctx.accounts.player;
@@ -1146,8 +1113,39 @@ pub fn get_valid_player_businesses(ctx: Context<GetValidPlayerBusinesses>) -> Re
     
     Ok(())
 }
+}
 
-
+/// ✅ Verify business ownership before operations
+pub fn verify_business_nft_ownership(
+    player_key: Pubkey,
+    business: &Business,
+    nft_token_account: &AccountInfo,
+) -> Result<()> {
+    if let Some(nft_mint) = business.nft_mint {
+        // Deserialize token account to check owner
+        let token_account = TokenAccount::try_deserialize(&mut nft_token_account.data.borrow().as_ref())?;
+        
+        // Verify current NFT owner matches the player
+        if token_account.owner != player_key {
+            msg!("❌ Business ownership mismatch: player={}, nft_owner={}", player_key, token_account.owner);
+            return Err(SolanaMafiaError::BusinessNotOwned.into());
+        }
+        
+        // Verify NFT mint matches business
+        if token_account.mint != nft_mint {
+            msg!("❌ NFT mint mismatch: business={}, token={}", nft_mint, token_account.mint);
+            return Err(SolanaMafiaError::BusinessNotOwned.into());
+        }
+        
+        // Verify player actually owns the NFT (amount > 0)
+        if token_account.amount == 0 {
+            msg!("❌ Player doesn't own NFT: amount=0");
+            return Err(SolanaMafiaError::BusinessNotOwned.into());
+        }
+    }
+    
+    Ok(())
+}
 // ===== ACCOUNT CONTEXTS =====
 
 #[derive(Accounts)]
@@ -1749,5 +1747,36 @@ pub struct GetValidPlayerBusinesses<'info> {
         bump = player.bump
     )]
     pub player: Account<'info, Player>,
+    // remaining_accounts содержат NFT token accounts для проверки
+}
+
+#[derive(Accounts)]
+pub struct ClaimEarningsWithNFTCheck<'info> {
+    #[account(mut)]
+    pub player_owner: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == player_owner.key()
+    )]
+    pub player: Account<'info, Player>,
+
+    #[account(
+        mut,
+        seeds = [TREASURY_SEED],
+        bump = treasury_pda.bump
+    )]
+    pub treasury_pda: Account<'info, Treasury>,
+
+    #[account(
+        mut,
+        seeds = [GAME_STATE_SEED],
+        bump = game_state.bump
+    )]
+    pub game_state: Account<'info, GameState>,
+
+    pub system_program: Program<'info, System>,
     // remaining_accounts содержат NFT token accounts для проверки
 }
