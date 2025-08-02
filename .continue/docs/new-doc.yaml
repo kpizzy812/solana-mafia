@@ -1,6 +1,0 @@
-name: GIT
-version: 0.0.1
-schema: v1
-docs:
-  - name: GIT
-    startUrl: https://github.com/kpizzy812/solana-mafia

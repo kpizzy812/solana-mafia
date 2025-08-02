@@ -10,6 +10,13 @@ This is a Solana-based game called "Solana Mafia" built with the Anchor framewor
 
 ### Smart Contract Structure
 - **Main Program**: `programs/solana-mafia/src/lib.rs` - Contains all instruction handlers and business logic
+- **Instructions**: `programs/solana-mafia/src/instructions/` - Modular instruction handlers
+  - `player.rs` - Player creation and management
+  - `business.rs` - Business creation, upgrades, and sales
+  - `earnings.rs` - Earnings calculation and claiming
+  - `nft.rs` - NFT minting, burning, and metadata updates
+  - `admin.rs` - Administrative functions
+  - `slots.rs` - Business slot management
 - **State Management**: `programs/solana-mafia/src/state/` - Modular state definitions
   - `player.rs` - Player accounts with business ownership and earnings tracking
   - `business.rs` - Business logic and types 
@@ -17,6 +24,9 @@ This is a Solana-based game called "Solana Mafia" built with the Anchor framewor
   - `game_state.rs` - Global game statistics and state
   - `game_config.rs` - Configurable game parameters
   - `treasury.rs` - Treasury PDA for holding funds
+- **Utilities**: `programs/solana-mafia/src/utils/` - Helper functions
+  - `calculations.rs` - Business value and earnings calculations
+  - `validation.rs` - Input validation and security checks
 
 ### Key Features
 - **NFT-Based Business Ownership**: Each business is represented by a unique NFT
@@ -27,8 +37,13 @@ This is a Solana-based game called "Solana Mafia" built with the Anchor framewor
 
 ### Testing Structure
 - Main test files in `tests/` directory
+  - `nft-only.js` - Focused NFT functionality tests
 - Backup comprehensive tests in `backups/tests/`
-- Manual testing script: `manual-test.sh`
+  - `solana-mafia.js` - Main test suite
+  - `economics-tests.js` - Economic model validation
+  - `security-tests.js` - Security and edge case testing
+  - `nft-comprehensive-test.js` - Comprehensive NFT testing
+- Manual testing script: `manual-test.sh` - Interactive testing toolkit with devnet integration
 
 ## Development Commands
 
@@ -53,7 +68,10 @@ yarn test-nft
 # Run tests on devnet
 yarn test-devnet
 
-# Manual testing
+# Run all tests (from Anchor.toml)
+anchor run test-all
+
+# Manual testing (interactive toolkit)
 ./manual-test.sh
 ```
 
