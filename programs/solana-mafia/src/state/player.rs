@@ -307,11 +307,43 @@ impl Player {
         
         estimated
     }
+
+    /// Получить данные для фронтенда только для валидных бизнесов
+    pub fn get_frontend_data_with_filter(&self, current_time: i64, valid_indices: &[usize]) -> PlayerFrontendData {
+        // Считаем только валидные бизнесы
+        let mut filtered_pending = 0u64;
+        let mut filtered_invested = 0u64;
+        let mut active_count = 0u8;
+        
+        for &index in valid_indices {
+            if let Some(business) = self.businesses.get(index) {
+                if business.is_active {
+                    filtered_invested += business.invested_amount;
+                    filtered_pending += business.calculate_pending_earnings(current_time);
+                    active_count += 1;
+                }
+            }
+        }
+        
+        // Добавляем stored pending earnings
+        filtered_pending += self.pending_earnings;
+        
+        let time_to_next_earnings = if self.next_earnings_time > current_time {
+            self.next_earnings_time - current_time
+        } else {
+            0
+        };
+        
+        PlayerFrontendData {
+            wallet: self.owner,
+            total_invested: filtered_invested, // 🆕 Только валидные
+            pending_earnings: self.pending_earnings, 
+            estimated_pending_earnings: filtered_pending, // 🆕 Только валидные
+            businesses_count: valid_indices.len() as u8, // 🆕 Только валидные
+            next_earnings_time: self.next_earnings_time,
+            time_to_next_earnings,
+            active_businesses: active_count, // 🆕 Только валидные активные
+        }
+    }
 }
 
-// 🔒 ТЕПЕРЬ БЕЗОПАСНО!
-// - Размер аккаунта с большим запасом (1000 байт)
-// - Все операции с checked math
-// - Лимиты на все значения
-// - Health checks для всех данных
-// - Защита от подозрительной активности

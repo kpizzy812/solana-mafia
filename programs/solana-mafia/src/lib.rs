@@ -19,6 +19,7 @@ pub mod utils;
 use state::*;
 use constants::*;
 use error::SolanaMafiaError;
+use utils::validation::*;
 
 // ============ EVENTS ============
 #[event]
@@ -456,16 +457,16 @@ pub fn create_business_with_nft(
 }
 
     /// Update earnings (owner only)
-    pub fn update_earnings(ctx: Context<UpdateEarnings>) -> Result<()> {
+    pub fn update_earnings(ctx: Context<UpdateEarningsWithNFTCheck>) -> Result<()> {
         let player = &mut ctx.accounts.player;
         let clock = Clock::get()?;
         
-        // Update pending earnings with safety checks
+        // 🆕 Проверяем владение NFT перед обновлением earnings
+        verify_all_nft_ownership(&ctx.remaining_accounts, &player.businesses, ctx.accounts.authority.key())?;
+        
         player.update_pending_earnings(clock.unix_timestamp)?;
         
         msg!("💰 Earnings updated for player: {}", player.owner);
-        msg!("Pending earnings: {} lamports", player.pending_earnings);
-        
         Ok(())
     }
 
@@ -474,6 +475,9 @@ pub fn create_business_with_nft(
         let player = &mut ctx.accounts.player;
         let game_state = &mut ctx.accounts.game_state;
         let clock = Clock::get()?;
+
+        // 🆕 Проверяем владение NFT перед клеймом
+        verify_all_nft_ownership(&ctx.remaining_accounts, &player.businesses, ctx.accounts.player_owner.key())?;
         
         // Update earnings first
         player.update_pending_earnings(clock.unix_timestamp)?;
@@ -698,8 +702,16 @@ pub fn batch_check_players_status(ctx: Context<BatchCheckPlayersStatus>) -> Resu
 pub fn get_player_data(ctx: Context<GetPlayerData>) -> Result<()> {
     let player = &ctx.accounts.player;
     let clock = Clock::get()?;
-    
-    let frontend_data = player.get_frontend_data(clock.unix_timestamp);
+
+    // 🆕 Получаем только актуальные бизнесы (которыми владеет)
+    let actual_businesses = verify_and_filter_owned_businesses(
+        &ctx.remaining_accounts, 
+        &player.businesses, 
+        player.owner
+    )?;
+
+    // 🆕 Возвращаем данные только по реально принадлежащим бизнесам
+    let frontend_data = player.get_frontend_data_with_filter(clock.unix_timestamp, &actual_businesses);
     
     // Логируем основные данные
     msg!("PLAYER_DATA: wallet={}, invested={}, pending={}, businesses={}, next_earnings={}", 
@@ -1023,7 +1035,7 @@ pub fn deactivate_burned_business(ctx: Context<DeactivateBurnedBusiness>) -> Res
         emit!(BusinessNFTBurned {
             player: business_nft.player,
             mint: business_nft.mint,
-            business_type: business_nft.businessType.to_index() as u8,
+            business_type: business_nft.business_type.to_index() as u8, 
             serial_number: business_nft.serial_number,
             burned_at: Clock::get()?.unix_timestamp,
         });
@@ -1063,6 +1075,7 @@ pub fn verify_business_nft_ownership(
     
     Ok(())
 }
+
 
 // ===== ACCOUNT CONTEXTS =====
 
@@ -1625,4 +1638,45 @@ pub struct VerifyBusinessOwnership<'info> {
     /// NFT token account
     /// CHECK: Token account verified in instruction  
     pub nft_token_account: AccountInfo<'info>,
+}
+
+// 🆕 ДОБАВИТЬ В КОНЕЦ lib.rs (в секцию контекстов)
+
+#[derive(Accounts)]
+pub struct UpdateEarningsWithNFTCheck<'info> {
+    pub authority: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, authority.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == authority.key()
+    )]
+    pub player: Account<'info, Player>,
+    // remaining_accounts содержат NFT token accounts для проверки
+}
+
+#[derive(Accounts)]
+pub struct AutoSyncBusinessOwnership<'info> {
+    #[account(mut)]
+    pub player_owner: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, player_owner.key().as_ref()],
+        bump = player.bump,
+        constraint = player.owner == player_owner.key()
+    )]
+    pub player: Account<'info, Player>,
+    // remaining_accounts содержат все NFT token accounts игрока
+}
+
+#[derive(Accounts)]
+pub struct GetValidPlayerBusinesses<'info> {
+    #[account(
+        seeds = [PLAYER_SEED, player.owner.as_ref()],
+        bump = player.bump
+    )]
+    pub player: Account<'info, Player>,
+    // remaining_accounts содержат NFT token accounts для проверки
 }
