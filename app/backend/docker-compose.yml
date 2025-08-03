@@ -12,7 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U solana_mafia"]
+      test: ["CMD-SHELL", "pg_isready -U solana_mafia -d solana_mafia_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,6 +38,9 @@ services:
     environment:
       DATABASE_URL: postgresql://solana_mafia:password@postgres:5432/solana_mafia_db
       REDIS_URL: redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
       SOLANA_RPC_URL: https://api.devnet.solana.com
       ENVIRONMENT: development
       LOG_LEVEL: INFO
@@ -61,6 +64,9 @@ services:
     environment:
       DATABASE_URL: postgresql://solana_mafia:password@postgres:5432/solana_mafia_db
       REDIS_URL: redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
       SOLANA_RPC_URL: https://api.devnet.solana.com
       ENVIRONMENT: development
       LOG_LEVEL: INFO
@@ -80,6 +86,9 @@ services:
     environment:
       DATABASE_URL: postgresql://solana_mafia:password@postgres:5432/solana_mafia_db
       REDIS_URL: redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
       SOLANA_RPC_URL: https://api.devnet.solana.com
       ENVIRONMENT: development
       LOG_LEVEL: INFO
@@ -101,6 +110,9 @@ services:
     environment:
       DATABASE_URL: postgresql://solana_mafia:password@postgres:5432/solana_mafia_db
       REDIS_URL: redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
       ENVIRONMENT: development
       LOG_LEVEL: INFO
     depends_on:

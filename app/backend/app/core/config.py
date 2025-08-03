@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
+    redis_host: str = Field(default="localhost", env="REDIS_HOST")
+    redis_port: int = Field(default=6379, env="REDIS_PORT")
+    redis_db: int = Field(default=0, env="REDIS_DB")
+    redis_password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
     redis_prefix: str = "solana_mafia:"
     
     # Solana
@@ -63,6 +67,18 @@ class Settings(BaseSettings):
     websocket_host: str = "127.0.0.1"
     websocket_port: int = 8001
     
+    # Telegram Mini Apps
+    telegram_bot_token: Optional[str] = Field(
+        default=None,
+        env="TELEGRAM_BOT_TOKEN",
+        description="Telegram bot token for Mini Apps authentication"
+    )
+    telegram_auth_max_age_hours: int = Field(
+        default=24,
+        env="TELEGRAM_AUTH_MAX_AGE_HOURS",
+        description="Maximum age of Telegram auth data in hours"
+    )
+    
     # Logging
     log_level: str = "INFO"
     log_format: str = "json"  # json or console
@@ -77,6 +93,18 @@ class Settings(BaseSettings):
     
     # Rate limiting
     rate_limit_enabled: bool = True
+    
+    # Admin settings
+    admin_wallets: str = Field(
+        default="",
+        env="ADMIN_WALLETS",
+        description="Comma-separated list of admin wallet addresses"
+    )
+    admin_api_key: Optional[str] = Field(
+        default=None,
+        env="ADMIN_API_KEY",
+        description="API key for admin authentication"
+    )
     rate_limit_requests: int = 100
     rate_limit_window: int = 60  # seconds
     

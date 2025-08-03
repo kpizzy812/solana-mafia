@@ -81,46 +81,49 @@ pub const NFT_LEVEL_NAMES: [&str; 4] = [
     "Legendary",  // Уровень 3
 ];
 
-/// URI для разных уровней NFT (будут разные изображения)
+/// URI for different NFT levels with mafia themed names
 pub const BUSINESS_NFT_URIS_BY_LEVEL: [[&str; 4]; 6] = [
-    // TobaccoShop
+    // Lucky Strike Cigars - tobacco shop with secrets
     [
-        "https://solana-mafia.com/nft/tobacco_basic.json",
-        "https://solana-mafia.com/nft/tobacco_advanced.json", 
-        "https://solana-mafia.com/nft/tobacco_elite.json",
-        "https://solana-mafia.com/nft/tobacco_legendary.json",
+        "https://solana-mafia.com/nft/cigars_corner_stand.json",       // Corner Stand
+        "https://solana-mafia.com/nft/cigars_smoke_secrets.json",     // Smoke & Secrets
+        "https://solana-mafia.com/nft/cigars_cigar_lounge.json",      // Cigar Lounge
+        "https://solana-mafia.com/nft/cigars_empire_smoke.json",      // Empire of Smoke
     ],
-    // FuneralService
+    // Eternal Rest Funeral - funeral parlor for "disappearances"
     [
-        "https://solana-mafia.com/nft/funeral_basic.json",
-        "https://solana-mafia.com/nft/funeral_advanced.json",
-        "https://solana-mafia.com/nft/funeral_elite.json", 
-        "https://solana-mafia.com/nft/funeral_legendary.json",
+        "https://solana-mafia.com/nft/funeral_quiet_departure.json",  // Quiet Departure
+        "https://solana-mafia.com/nft/funeral_silent_service.json",   // Silent Service
+        "https://solana-mafia.com/nft/funeral_final_solution.json",   // Final Solution
+        "https://solana-mafia.com/nft/funeral_legacy_silence.json",   // Legacy of Silence
     ],
-    // Остальные типы аналогично...
+    // Midnight Motors Garage - auto shop for untraceable vehicles
     [
-        "https://solana-mafia.com/nft/car_basic.json",
-        "https://solana-mafia.com/nft/car_advanced.json",
-        "https://solana-mafia.com/nft/car_elite.json",
-        "https://solana-mafia.com/nft/car_legendary.json",
+        "https://solana-mafia.com/nft/motors_street_repair.json",     // Street Repair
+        "https://solana-mafia.com/nft/motors_custom_works.json",      // Custom Works
+        "https://solana-mafia.com/nft/motors_underground.json",       // Underground Garage
+        "https://solana-mafia.com/nft/motors_ghost_fleet.json",       // Ghost Fleet
     ],
+    // Nonna's Secret Kitchen - Italian restaurant for operation planning
     [
-        "https://solana-mafia.com/nft/restaurant_basic.json",
-        "https://solana-mafia.com/nft/restaurant_advanced.json",
-        "https://solana-mafia.com/nft/restaurant_elite.json",
-        "https://solana-mafia.com/nft/restaurant_legendary.json",
+        "https://solana-mafia.com/nft/kitchen_family_recipe.json",    // Family Recipe
+        "https://solana-mafia.com/nft/kitchen_mamas_table.json",      // Mama's Table
+        "https://solana-mafia.com/nft/kitchen_dons_dining.json",      // Don's Dining
+        "https://solana-mafia.com/nft/kitchen_empire_feast.json",     // Empire Feast
     ],
+    // Velvet Shadows Club - elite club for "family business"
     [
-        "https://solana-mafia.com/nft/club_basic.json",
-        "https://solana-mafia.com/nft/club_advanced.json",
-        "https://solana-mafia.com/nft/club_elite.json",
-        "https://solana-mafia.com/nft/club_legendary.json",
+        "https://solana-mafia.com/nft/club_private_room.json",        // Private Room
+        "https://solana-mafia.com/nft/club_exclusive_lounge.json",    // Exclusive Lounge
+        "https://solana-mafia.com/nft/club_shadow_society.json",      // Shadow Society
+        "https://solana-mafia.com/nft/club_velvet_empire.json",       // Velvet Empire
     ],
+    // Angel's Mercy Foundation - charity foundation for "assistance"
     [
-        "https://solana-mafia.com/nft/charity_basic.json",
-        "https://solana-mafia.com/nft/charity_advanced.json",
-        "https://solana-mafia.com/nft/charity_elite.json",
-        "https://solana-mafia.com/nft/charity_legendary.json",
+        "https://solana-mafia.com/nft/mercy_helping_hand.json",       // Helping Hand
+        "https://solana-mafia.com/nft/mercy_guardian_angel.json",     // Guardian Angel
+        "https://solana-mafia.com/nft/mercy_divine_intervention.json", // Divine Intervention
+        "https://solana-mafia.com/nft/mercy_mercy_empire.json",       // Mercy Empire
     ],
 ];
 
@@ -143,27 +146,74 @@ pub const FINAL_SELL_FEE_PERCENT: u8 = 2;
 // NFT METADATA CONSTANTS
 // ============================================================================
 
-/// Business names for NFTs
+/// Business names for NFTs - Mafia themed business names
 pub const BUSINESS_NFT_NAMES: [&str; 6] = [
-    "Tobacco Shop",
-    "Funeral Service", 
-    "Car Workshop",
-    "Italian Restaurant",
-    "Gentlemen Club",
-    "Charity Fund",
+    "Lucky Strike Cigars",      // Family tobacco shop with secrets
+    "Eternal Rest Funeral",     // Funeral parlor for "disappearances"
+    "Midnight Motors Garage",   // Auto shop for untraceable vehicles
+    "Nonna's Secret Kitchen",   // Italian restaurant for operation planning
+    "Velvet Shadows Club",      // Elite club for "family business"
+    "Angel's Mercy Foundation", // Charity foundation for "assistance"
 ];
 
 /// Collection symbol
 pub const NFT_COLLECTION_SYMBOL: &str = "MAFIA";
 
-// Placeholder URIs - will be replaced with actual metadata
+/// Upgrade names for each business type [business][level]
+/// Each business has unique progression from basic to legendary level
+pub const BUSINESS_UPGRADE_NAMES: [[&str; 4]; 6] = [
+    // Lucky Strike Cigars - tobacco shop with secrets
+    [
+        "Corner Stand",        // Level 0: humble kiosk
+        "Smoke & Secrets",     // Level 1: back room appears
+        "Cigar Lounge",        // Level 2: elite club for chosen ones
+        "Empire of Smoke",     // Level 3: citywide network
+    ],
+    // Eternal Rest Funeral - funeral parlor for "disappearances"
+    [
+        "Quiet Departure",     // Level 0: simple funerals
+        "Silent Service",      // Level 1: premium services
+        "Final Solution",      // Level 2: VIP funerals for elite
+        "Legacy of Silence",   // Level 3: empire of silence
+    ],
+    // Midnight Motors Garage - auto shop for untraceable vehicles
+    [
+        "Street Repair",       // Level 0: regular workshop
+        "Custom Works",        // Level 1: tuning and modifications
+        "Underground Garage",  // Level 2: secret conversions
+        "Ghost Fleet",         // Level 3: empire of invisible cars
+    ],
+    // Nonna's Secret Kitchen - Italian restaurant for operation planning
+    [
+        "Family Recipe",       // Level 0: home kitchen
+        "Mama's Table",        // Level 1: popular trattoria
+        "Don's Dining",        // Level 2: restaurant for important meetings
+        "Empire Feast",        // Level 3: network of cover restaurants
+    ],
+    // Velvet Shadows Club - elite club for "family business"
+    [
+        "Private Room",        // Level 0: closed room
+        "Exclusive Lounge",    // Level 1: VIP zone
+        "Shadow Society",      // Level 2: secret society
+        "Velvet Empire",       // Level 3: network of influential clubs
+    ],
+    // Angel's Mercy Foundation - charity foundation for "assistance"
+    [
+        "Helping Hand",        // Level 0: local charity
+        "Guardian Angel",      // Level 1: major donations
+        "Divine Intervention", // Level 2: international foundation
+        "Mercy Empire",        // Level 3: global "assistance" network
+    ],
+];
+
+// Legacy base URIs (for compatibility)
 pub const BUSINESS_NFT_URIS: [&str; 6] = [
-    "https://solana-mafia.com/nft/tobacco_basic.json",
-    "https://solana-mafia.com/nft/funeral_basic.json",
-    "https://solana-mafia.com/nft/car_basic.json",
-    "https://solana-mafia.com/nft/restaurant_basic.json",
-    "https://solana-mafia.com/nft/club_basic.json",
-    "https://solana-mafia.com/nft/charity_basic.json",
+    "https://solana-mafia.com/nft/cigars_corner_stand.json",     // Lucky Strike Cigars
+    "https://solana-mafia.com/nft/funeral_quiet_departure.json", // Eternal Rest Funeral
+    "https://solana-mafia.com/nft/motors_street_repair.json",    // Midnight Motors Garage
+    "https://solana-mafia.com/nft/kitchen_family_recipe.json",   // Nonna's Secret Kitchen
+    "https://solana-mafia.com/nft/club_private_room.json",       // Velvet Shadows Club
+    "https://solana-mafia.com/nft/mercy_helping_hand.json",      // Angel's Mercy Foundation
 ];
 
 // ============================================================================

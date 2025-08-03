@@ -11,6 +11,11 @@ from .business import Business, BusinessSlot
 from .nft import BusinessNFT
 from .event import Event
 from .earnings import EarningsSchedule, EarningsHistory
+from .user import User, UserType
+from .referral import (
+    ReferralCode, ReferralRelation, ReferralCommission,
+    ReferralStats, ReferralConfig
+)
 
 __all__ = [
     "BaseModel",
@@ -22,4 +27,11 @@ __all__ = [
     "Event",
     "EarningsSchedule",
     "EarningsHistory",
+    "User",
+    "UserType",
+    "ReferralCode",
+    "ReferralRelation",
+    "ReferralCommission",
+    "ReferralStats",
+    "ReferralConfig",
 ]

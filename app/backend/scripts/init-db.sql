@@ -1,6 +1,9 @@
 -- Initialize database for Solana Mafia
 -- This script runs when the PostgreSQL container starts
 
+-- Connect to the main database (already created by docker-compose)
+\c solana_mafia_db;
+
 -- Create additional indexes that might be needed
 -- Note: Tables will be created by SQLAlchemy migrations
 

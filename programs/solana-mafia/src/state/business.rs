@@ -46,9 +46,18 @@ impl BusinessType {
         BUSINESS_RATES[self.to_index()]
     }
 
-    /// 🆕 Получить название для NFT
+    /// Get NFT name for this business type
     pub fn get_nft_name(&self) -> &'static str {
         BUSINESS_NFT_NAMES[self.to_index()]
+    }
+
+    /// Get upgrade name for specific level
+    pub fn get_upgrade_name(&self, level: u8) -> &'static str {
+        if level < 4 {
+            BUSINESS_UPGRADE_NAMES[self.to_index()][level as usize]
+        } else {
+            BUSINESS_UPGRADE_NAMES[self.to_index()][3] // Maximum level
+        }
     }
 }
 
@@ -174,9 +183,9 @@ impl Business {
         self.total_invested_amount // База + все улучшения
     }
 
-    /// 🆕 Получить название уровня для NFT
+    /// 🆕 Получить название уровня для NFT (специфичное для каждого бизнеса)
     pub fn get_nft_level_name(&self) -> &'static str {
-        NFT_LEVEL_NAMES[self.upgrade_level as usize]
+        self.business_type.get_upgrade_name(self.upgrade_level)
     }
 
     /// 🆕 Получить URI для NFT текущего уровня

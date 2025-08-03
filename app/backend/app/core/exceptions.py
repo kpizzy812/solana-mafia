@@ -42,6 +42,14 @@ class SolanaError(SolanaMafiaException):
         super().__init__(message, "SOLANA_ERROR", details)
 
 
+class SolanaRPCError(SolanaError):
+    """Raised when there's a Solana RPC error."""
+    
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, details)
+        self.code = "SOLANA_RPC_ERROR"
+
+
 class IndexerError(SolanaMafiaException):
     """Raised when there's an event indexer error."""
     

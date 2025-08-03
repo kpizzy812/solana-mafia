@@ -180,15 +180,28 @@ class BusinessNFT(BaseModel, TimestampMixin):
     def display_name(self) -> str:
         """Get display name for the NFT."""
         business_names = {
-            BusinessType.LEMONADE_STAND: "Lemonade Stand",
-            BusinessType.CAR_WASH: "Car Wash", 
-            BusinessType.RESTAURANT: "Restaurant",
-            BusinessType.TECH_STARTUP: "Tech Startup",
-            BusinessType.CRYPTO_EXCHANGE: "Crypto Exchange"
+            BusinessType.TOBACCO_SHOP: "Lucky Strike Cigars",
+            BusinessType.FUNERAL_SERVICE: "Eternal Rest Funeral",
+            BusinessType.CAR_WORKSHOP: "Midnight Motors Garage", 
+            BusinessType.ITALIAN_RESTAURANT: "Nonna's Secret Kitchen",
+            BusinessType.GENTLEMEN_CLUB: "Velvet Shadows Club",
+            BusinessType.CHARITY_FUND: "Angel's Mercy Foundation"
         }
         business_name = business_names.get(self.business_type, "Unknown")
-        level_names = ["Basic", "Bronze", "Silver", "Gold", "Platinum", "Diamond"]
-        level_name = level_names[min(self.level - 1, len(level_names) - 1)]
+        
+        # Специфичные названия улучшений для каждого бизнеса
+        upgrade_names = [
+            ["Corner Stand", "Smoke & Secrets", "Cigar Lounge", "Empire of Smoke"],           # Lucky Strike Cigars
+            ["Quiet Departure", "Silent Service", "Final Solution", "Legacy of Silence"],    # Eternal Rest Funeral
+            ["Street Repair", "Custom Works", "Underground Garage", "Ghost Fleet"],          # Midnight Motors Garage
+            ["Family Recipe", "Mama's Table", "Don's Dining", "Empire Feast"],               # Nonna's Secret Kitchen
+            ["Private Room", "Exclusive Lounge", "Shadow Society", "Velvet Empire"],         # Velvet Shadows Club
+            ["Helping Hand", "Guardian Angel", "Divine Intervention", "Mercy Empire"],       # Angel's Mercy Foundation
+        ]
+        
+        business_index = self.business_type.value
+        level_index = min(self.level, 3)  # 0-3 levels
+        level_name = upgrade_names[business_index][level_index] if business_index < len(upgrade_names) else "Basic"
         
         return f"{level_name} {business_name} #{self.serial_number}"
     

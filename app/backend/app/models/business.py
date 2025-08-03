@@ -17,11 +17,12 @@ from .base import BaseModel, TimestampMixin
 
 class BusinessType(Enum):
     """Business types matching on-chain enum."""
-    LEMONADE_STAND = 0
-    CAR_WASH = 1
-    RESTAURANT = 2
-    TECH_STARTUP = 3
-    CRYPTO_EXCHANGE = 4
+    TOBACCO_SHOP = 0       # Lucky Strike Cigars
+    FUNERAL_SERVICE = 1    # Eternal Rest Funeral  
+    CAR_WORKSHOP = 2       # Midnight Motors Garage
+    ITALIAN_RESTAURANT = 3 # Nonna's Secret Kitchen
+    GENTLEMEN_CLUB = 4     # Velvet Shadows Club
+    CHARITY_FUND = 5       # Angel's Mercy Foundation
 
 
 class SlotType(Enum):
@@ -151,11 +152,12 @@ class Business(BaseModel, TimestampMixin):
     def name(self) -> str:
         """Get business display name."""
         business_names = {
-            BusinessType.LEMONADE_STAND: "Lemonade Stand",
-            BusinessType.CAR_WASH: "Car Wash",
-            BusinessType.RESTAURANT: "Restaurant", 
-            BusinessType.TECH_STARTUP: "Tech Startup",
-            BusinessType.CRYPTO_EXCHANGE: "Crypto Exchange"
+            BusinessType.TOBACCO_SHOP: "Lucky Strike Cigars",
+            BusinessType.FUNERAL_SERVICE: "Eternal Rest Funeral",
+            BusinessType.CAR_WORKSHOP: "Midnight Motors Garage", 
+            BusinessType.ITALIAN_RESTAURANT: "Nonna's Secret Kitchen",
+            BusinessType.GENTLEMEN_CLUB: "Velvet Shadows Club",
+            BusinessType.CHARITY_FUND: "Angel's Mercy Foundation"
         }
         return business_names.get(self.business_type, "Unknown Business")
     

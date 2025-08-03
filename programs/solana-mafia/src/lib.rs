@@ -416,7 +416,7 @@ pub fn create_business_nft<'info>(
 
     // Create metadata with upgrade level
     let business_index = business_type.to_index();
-    let level_name = NFT_LEVEL_NAMES.get(upgrade_level as usize).unwrap_or(&"Basic");
+    let level_name = business_type.get_upgrade_name(upgrade_level);
     let nft_name = format!("{} {} #{}", level_name, BUSINESS_NFT_NAMES[business_index], serial_number);
     let nft_uri = BUSINESS_NFT_URIS_BY_LEVEL[business_index].get(upgrade_level as usize)
         .unwrap_or(&BUSINESS_NFT_URIS_BY_LEVEL[business_index][0]);

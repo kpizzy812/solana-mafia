@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Create enum types
-    op.execute("CREATE TYPE businesstype AS ENUM ('LEMONADE_STAND', 'CAR_WASH', 'RESTAURANT', 'TECH_STARTUP', 'CRYPTO_EXCHANGE')")
+    op.execute("CREATE TYPE businesstype AS ENUM ('TOBACCO_SHOP', 'FUNERAL_SERVICE', 'CAR_WORKSHOP', 'ITALIAN_RESTAURANT', 'GENTLEMEN_CLUB', 'CHARITY_FUND')")
     op.execute("CREATE TYPE slottype AS ENUM ('BASIC', 'PREMIUM', 'VIP', 'LEGENDARY')")
     op.execute("CREATE TYPE eventtype AS ENUM ('PLAYER_CREATED', 'BUSINESS_CREATED', 'BUSINESS_UPGRADED', 'BUSINESS_SOLD', 'EARNINGS_UPDATED', 'EARNINGS_CLAIMED', 'BUSINESS_NFT_MINTED', 'BUSINESS_NFT_BURNED', 'BUSINESS_NFT_UPGRADED', 'BUSINESS_TRANSFERRED', 'BUSINESS_DEACTIVATED', 'SLOT_UNLOCKED', 'PREMIUM_SLOT_PURCHASED', 'BUSINESS_CREATED_IN_SLOT', 'BUSINESS_UPGRADED_IN_SLOT', 'BUSINESS_SOLD_FROM_SLOT', 'REFERRAL_BONUS_ADDED')")
     op.execute("CREATE TYPE eventstatus AS ENUM ('PENDING', 'PROCESSING', 'PROCESSED', 'FAILED', 'SKIPPED')")
@@ -63,7 +63,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(length=200), nullable=False, comment='NFT name'),
         sa.Column('symbol', sa.String(length=10), nullable=False, comment='NFT symbol'),
         sa.Column('uri', sa.Text(), nullable=False, comment='Metadata URI'),
-        sa.Column('business_type', postgresql.ENUM('LEMONADE_STAND', 'CAR_WASH', 'RESTAURANT', 'TECH_STARTUP', 'CRYPTO_EXCHANGE', name='businesstype'), nullable=False, comment='Type of business this NFT represents'),
+        sa.Column('business_type', postgresql.ENUM('TOBACCO_SHOP', 'FUNERAL_SERVICE', 'CAR_WORKSHOP', 'ITALIAN_RESTAURANT', 'GENTLEMEN_CLUB', 'CHARITY_FUND', name='businesstype'), nullable=False, comment='Type of business this NFT represents'),
         sa.Column('level', sa.Integer(), nullable=False, comment='Business level'),
         sa.Column('serial_number', sa.BigInteger(), nullable=False, comment='Unique serial number for this business type'),
         sa.Column('base_invested_amount', sa.BigInteger(), nullable=False, comment='Base investment amount in lamports'),
@@ -93,7 +93,7 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('player_wallet', sa.String(length=44), nullable=False, comment='Owner\'s wallet address'),
         sa.Column('nft_mint', sa.String(length=44), nullable=True, comment='Associated NFT mint address'),
-        sa.Column('business_type', postgresql.ENUM('LEMONADE_STAND', 'CAR_WASH', 'RESTAURANT', 'TECH_STARTUP', 'CRYPTO_EXCHANGE', name='businesstype'), nullable=False, comment='Type of business'),
+        sa.Column('business_type', postgresql.ENUM('TOBACCO_SHOP', 'FUNERAL_SERVICE', 'CAR_WORKSHOP', 'ITALIAN_RESTAURANT', 'GENTLEMEN_CLUB', 'CHARITY_FUND', name='businesstype'), nullable=False, comment='Type of business'),
         sa.Column('level', sa.Integer(), nullable=False, comment='Business upgrade level'),
         sa.Column('base_cost', sa.BigInteger(), nullable=False, comment='Base cost of business in lamports'),
         sa.Column('total_invested_amount', sa.BigInteger(), nullable=False, comment='Total invested including upgrades in lamports'),

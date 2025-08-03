@@ -96,7 +96,7 @@ async def test_business_nft_model():
             name="Test Lemonade Stand #1",
             symbol="MAFIA",
             uri="https://test.com/metadata/1",
-            business_type=BusinessType.LEMONADE_STAND,
+            business_type=BusinessType.TOBACCO_SHOP,
             level=1,
             serial_number=1,
             base_invested_amount=1000000,  # 0.001 SOL
