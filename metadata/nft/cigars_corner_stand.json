@@ -1,0 +1,41 @@
+{
+  "name": "Corner Stand Lucky Strike Cigars #1",
+  "symbol": "MAFIA",
+  "description": "A humble tobacco kiosk that serves as the perfect cover for family business operations. Level 0 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/cigars_corner_stand.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Lucky Strike Cigars"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Corner Stand"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 0
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "0.8%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Common"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/cigars_corner_stand.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

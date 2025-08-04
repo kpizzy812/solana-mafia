@@ -1,0 +1,41 @@
+{
+  "name": "Exclusive Lounge Velvet Shadows Club #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "An elite club for conducting exclusive 'family business'. Level 1 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/velvet_shadows_club_exclusive_lounge.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Velvet Shadows Club"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Exclusive Lounge"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 1
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Uncommon"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/velvet_shadows_club_exclusive_lounge.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

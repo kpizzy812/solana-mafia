@@ -1,0 +1,41 @@
+{
+  "name": "Quiet Departure Eternal Rest Funeral #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A funeral parlor providing discreet services for those who need to 'disappear'. Level 0 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_quiet_departure.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Eternal Rest Funeral"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Quiet Departure"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 0
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "0.9%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Common"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_quiet_departure.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

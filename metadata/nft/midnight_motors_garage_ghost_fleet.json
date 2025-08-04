@@ -1,0 +1,41 @@
+{
+  "name": "Ghost Fleet Midnight Motors Garage #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "An auto shop specializing in untraceable vehicle modifications. Level 3 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/midnight_motors_garage_ghost_fleet.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Midnight Motors Garage"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Ghost Fleet"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 3
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1.3%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Legendary"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/midnight_motors_garage_ghost_fleet.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

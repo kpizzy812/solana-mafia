@@ -1,0 +1,41 @@
+{
+  "name": "Empire of Smoke Lucky Strike Cigars #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A tobacco shop that serves as the perfect cover for family business operations. Level 3 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/lucky_strike_cigars_empire_of_smoke.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Lucky Strike Cigars"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Empire of Smoke"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 3
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1.1%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Legendary"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/lucky_strike_cigars_empire_of_smoke.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

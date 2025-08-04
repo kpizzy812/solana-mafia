@@ -1,0 +1,41 @@
+{
+  "name": "Silent Service Eternal Rest Funeral #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A funeral parlor providing discreet services for those who need to 'disappear'. Level 1 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_silent_service.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Eternal Rest Funeral"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Silent Service"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 1
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Uncommon"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_silent_service.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

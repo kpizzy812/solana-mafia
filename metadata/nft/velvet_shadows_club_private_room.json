@@ -1,0 +1,41 @@
+{
+  "name": "Private Room Velvet Shadows Club #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "An elite club for conducting exclusive 'family business'. Level 0 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/velvet_shadows_club_private_room.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Velvet Shadows Club"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Private Room"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 0
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "0.9%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Common"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/velvet_shadows_club_private_room.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

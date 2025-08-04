@@ -1,0 +1,41 @@
+{
+  "name": "Legacy of Silence Eternal Rest Funeral #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A funeral parlor providing discreet services for those who need to 'disappear'. Level 3 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_legacy_of_silence.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Eternal Rest Funeral"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Legacy of Silence"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 3
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1.2%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Legendary"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_legacy_of_silence.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

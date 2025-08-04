@@ -1,0 +1,41 @@
+{
+  "name": "Cigar Lounge Lucky Strike Cigars #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A tobacco shop that serves as the perfect cover for family business operations. Level 2 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/lucky_strike_cigars_cigar_lounge.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Lucky Strike Cigars"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Cigar Lounge"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 2
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Rare"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/lucky_strike_cigars_cigar_lounge.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

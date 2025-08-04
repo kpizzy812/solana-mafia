@@ -1,0 +1,41 @@
+{
+  "name": "Custom Works Midnight Motors Garage #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "An auto shop specializing in untraceable vehicle modifications. Level 1 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/midnight_motors_garage_custom_works.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Midnight Motors Garage"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Custom Works"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 1
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1.1%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Uncommon"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/midnight_motors_garage_custom_works.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

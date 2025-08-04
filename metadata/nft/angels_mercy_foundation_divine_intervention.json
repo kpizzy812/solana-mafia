@@ -1,0 +1,41 @@
+{
+  "name": "Divine Intervention Angel's Mercy Foundation #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A charity foundation providing 'assistance' to those in need. Level 2 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/angels_mercy_foundation_divine_intervention.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Angel's Mercy Foundation"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Divine Intervention"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 2
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1.2%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Rare"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/angels_mercy_foundation_divine_intervention.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

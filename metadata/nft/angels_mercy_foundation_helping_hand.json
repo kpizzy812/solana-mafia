@@ -1,0 +1,41 @@
+{
+  "name": "Helping Hand Angel's Mercy Foundation #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A charity foundation providing 'assistance' to those in need. Level 0 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/angels_mercy_foundation_helping_hand.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Angel's Mercy Foundation"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Helping Hand"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 0
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Common"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/angels_mercy_foundation_helping_hand.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "Final Solution Eternal Rest Funeral #{{SERIAL}}",
+  "symbol": "MAFIA",
+  "description": "A funeral parlor providing discreet services for those who need to 'disappear'. Level 2 business in the Solana Mafia game.",
+  "image": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_final_solution.svg",
+  "attributes": [
+    {
+      "trait_type": "Business Type",
+      "value": "Eternal Rest Funeral"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Final Solution"
+    },
+    {
+      "trait_type": "Upgrade Level",
+      "value": 2
+    },
+    {
+      "trait_type": "Daily Rate",
+      "value": "1.1%"
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Rare"
+    },
+    {
+      "trait_type": "Game",
+      "value": "Solana Mafia"
+    }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [
+      {
+        "uri": "https://raw.githubusercontent.com/kpizzy812/solana-mafia/main/metadata/images/eternal_rest_funeral_final_solution.svg",
+        "type": "image/png"
+      }
+    ]
+  }
+}
