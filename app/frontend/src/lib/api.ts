@@ -182,6 +182,54 @@ class ApiClient {
     const { Authorization, ...rest } = this.headers as any;
     this.headers = rest;
   }
+
+  // Generic GET method for direct endpoint access
+  async get<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'GET'
+    });
+  }
+
+  // Generic POST method for direct endpoint access
+  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    const options: RequestInit = {
+      method: 'POST'
+    };
+
+    if (data) {
+      if (typeof data === 'string') {
+        options.body = data;
+      } else {
+        options.body = JSON.stringify(data);
+      }
+    }
+
+    return this.request<T>(endpoint, options);
+  }
+
+  // Generic PUT method for direct endpoint access
+  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    const options: RequestInit = {
+      method: 'PUT'
+    };
+
+    if (data) {
+      if (typeof data === 'string') {
+        options.body = data;
+      } else {
+        options.body = JSON.stringify(data);
+      }
+    }
+
+    return this.request<T>(endpoint, options);
+  }
+
+  // Generic DELETE method for direct endpoint access
+  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'DELETE'
+    });
+  }
 }
 
 // Export singleton instance
@@ -237,6 +285,35 @@ export const syncPlayerFromBlockchain = async (walletAddress: string): Promise<A
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Sync failed',
+    };
+  }
+};
+
+// Connect wallet and create user
+export interface ConnectWalletResponse {
+  user_id: string;
+  wallet: string;
+  referral_code: string;
+  is_new_user: boolean;
+}
+
+export const connectWallet = async (walletAddress: string): Promise<ApiResponse<ConnectWalletResponse>> => {
+  try {
+    const response = await apiClient.post('/players/connect', {
+      wallet: walletAddress
+    });
+    
+    if (response.success) {
+      console.log('✅ Wallet connected successfully:', response.data);
+      return response;
+    } else {
+      throw new Error(response.error || 'Failed to connect wallet');
+    }
+  } catch (error) {
+    console.error('❌ Wallet connection failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Wallet connection failed',
     };
   }
 };

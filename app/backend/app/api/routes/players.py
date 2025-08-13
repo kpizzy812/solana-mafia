@@ -31,7 +31,9 @@ from app.api.schemas.players import (
     PlayerLeaderboardResponse,
     PlayerLeaderboardEntry,
     PlayerActivityResponse,
-    PlayerActivityLog
+    PlayerActivityLog,
+    ConnectWalletRequest,
+    ConnectWalletResponse
 )
 from app.api.schemas.common import (
     SuccessResponse,
@@ -45,7 +47,9 @@ from app.models.player import Player
 from app.models.business import Business
 # Убрано BusinessNFT - NFT больше не используются
 from app.models.event import Event
+from app.models.user import UserType
 from app.services.solana_client import get_solana_client
+from app.services.referral_service import ReferralService
 
 
 logger = structlog.get_logger(__name__)
@@ -1123,5 +1127,69 @@ async def get_complete_player_profile(
             detail={
                 "error": "COMPLETE_PROFILE_ERROR",
                 "message": f"Failed to retrieve complete player profile: {str(e)}"
+            }
+        )
+
+
+@router.post(
+    "/connect",
+    response_model=SuccessResponse,
+    summary="Connect Wallet",
+    description="Create or get user when wallet connects, generating referral code if needed"
+)
+async def connect_wallet(
+    request: ConnectWalletRequest,
+    db: AsyncSession = Depends(get_database)
+):
+    """Connect wallet and create user with referral code if needed."""
+    try:
+        wallet_address = request.wallet
+        
+        # Initialize referral service
+        referral_service = ReferralService(db)
+        
+        # Get or create user with referral code
+        user = await referral_service.get_or_create_user(
+            user_id=wallet_address,
+            user_type=UserType.WALLET,
+            wallet_address=wallet_address
+        )
+        
+        # Check if this was a new user creation
+        is_new_user = user.created_at and (
+            datetime.utcnow() - user.created_at.replace(tzinfo=None)
+        ).total_seconds() < 60  # Created within last minute
+        
+        await db.commit()
+        
+        # Prepare response
+        response_data = ConnectWalletResponse(
+            user_id=user.id,
+            wallet=user.wallet_address,
+            referral_code=user.referral_code,
+            is_new_user=is_new_user
+        )
+        
+        logger.info(
+            "Wallet connected successfully",
+            wallet=wallet_address,
+            user_id=user.id,
+            referral_code=user.referral_code,
+            is_new_user=is_new_user
+        )
+        
+        return create_success_response(
+            data=response_data,
+            message="Wallet connected successfully" if not is_new_user else "New user created successfully"
+        )
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error("Error connecting wallet", wallet=request.wallet, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "WALLET_CONNECT_ERROR",
+                "message": f"Failed to connect wallet: {str(e)}"
             }
         )

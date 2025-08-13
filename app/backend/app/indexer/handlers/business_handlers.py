@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.event_parser import ParsedEvent
 from app.models.player import Player
 from app.models.business import Business, BusinessType
-from app.models.user import User
+from app.models.user import User, UserType
 from app.services.prestige_service import PrestigeService
 from app.services.referral_service import ReferralService
 from app.models.prestige import ActionType
@@ -711,17 +711,35 @@ class BusinessHandlers:
             raise
     
     async def _get_or_create_user(self, db: AsyncSession, wallet_address: str) -> User:
-        """Find or create user for wallet address."""
-        # Find existing user
+        """Find or create user for wallet address using referral service."""
+        # Find existing user first
         user_result = await db.execute(
             select(User).where(User.id == wallet_address)
         )
         user = user_result.scalar_one_or_none()
         
         if not user:
-            # Create wallet user if doesn't exist
-            user = User.create_wallet_user(wallet_address)
-            db.add(user)
-            self.logger.info("Created wallet user", wallet=wallet_address)
+            # Use referral service to create user with referral code
+            referral_service = ReferralService(db)
+            user = await referral_service.get_or_create_user(
+                user_id=wallet_address,
+                user_type=UserType.WALLET,
+                wallet_address=wallet_address
+            )
+            self.logger.info(
+                "Created wallet user with referral code", 
+                wallet=wallet_address,
+                referral_code=user.referral_code
+            )
+        else:
+            # Ensure existing user has referral code
+            if not user.referral_code:
+                referral_service = ReferralService(db)
+                user.referral_code = await referral_service._generate_unique_referral_code()
+                self.logger.info(
+                    "Added referral code to existing user",
+                    wallet=wallet_address,
+                    referral_code=user.referral_code
+                )
             
         return user

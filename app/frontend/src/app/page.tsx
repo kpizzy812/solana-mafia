@@ -55,6 +55,11 @@ export default function Home() {
     businesses,
     walletBalance,
     balanceLoading,
+    userReferralCode,
+    isWalletConnecting,
+    walletConnectError,
+    isNewUser,
+    refetchWalletConnect,
     handleBuyBusiness,
     handleWithdrawClick,
     handleUpdateEarningsClick,
@@ -184,7 +189,7 @@ export default function Home() {
         availableSlots={availableSlots}
         userBalance={walletBalance}
         language={language}
-        isNewPlayer={!data.profile && (!data.stats || (data.stats && data.stats.total_businesses === 0 && !data.stats.last_activity))} // New player if no profile and no real stats
+        isNewPlayer={isNewUser || (!data.stats || data.stats.total_businesses === 0)} // New player if just created user or no businesses in blockchain
         entryFee={fomoData.currentEntryFee} // Entry fee from FOMO data
       />
 

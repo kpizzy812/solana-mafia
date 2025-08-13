@@ -13,7 +13,8 @@
     "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
     "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.98.4",
-    "bs58": "^6.0.0"
+    "bs58": "^6.0.0",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "chai": "^4.3.4",

@@ -8,6 +8,7 @@ import { usePlayerData } from '@/hooks/usePlayerData';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useLanguage } from '@/hooks/useLanguage';
+import { useWalletConnect } from '@/hooks/useWalletConnect';
 import { purchaseBusiness, sellBusiness, withdrawEarnings, upgradeBusiness, updateEarnings } from '../../lib/solana';
 import { calculateDailyYield, lamportsToSOL, apiClient, syncPlayerFromBlockchain } from '../../lib/api';
 import { useReferralCode, useReferralActions } from '@/stores/useReferralStore';
@@ -45,6 +46,15 @@ export const useAppLogic = (wallet: any, connected: boolean, publicKey: any) => 
 
   const { data, loading, error, refetch } = usePlayerData();
   const { balance: walletBalance, loading: balanceLoading } = useWalletBalance();
+  
+  // Wallet connection and referral code management
+  const { 
+    userReferralCode, 
+    isConnecting: isWalletConnecting, 
+    error: walletConnectError,
+    isNewUser,
+    refetch: refetchWalletConnect
+  } = useWalletConnect();
 
   // Process referral code after successful business purchase
   const processReferralCode = useCallback(async (walletAddress: string) => {
@@ -800,6 +810,13 @@ export const useAppLogic = (wallet: any, connected: boolean, publicKey: any) => 
     businesses,
     walletBalance,
     balanceLoading,
+    
+    // Wallet connection
+    userReferralCode,
+    isWalletConnecting,
+    walletConnectError,
+    isNewUser,
+    refetchWalletConnect,
     
     // Actions
     handleBuyBusiness,

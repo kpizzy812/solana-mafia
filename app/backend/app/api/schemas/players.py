@@ -174,6 +174,20 @@ def validate_wallet_address(cls, v):
     return v
 
 
+# Connect wallet schemas
+class ConnectWalletRequest(BaseModel):
+    """Request schema for wallet connection."""
+    wallet: str = WalletField
+
+
+class ConnectWalletResponse(BaseModel):
+    """Response schema for wallet connection."""
+    user_id: str = Field(description="User identifier")
+    wallet: str = WalletField
+    referral_code: str = Field(description="User's referral code")
+    is_new_user: bool = Field(description="Whether this is a new user")
+    
+
 # Add validator to schemas
 PlayerBase.model_validate = validate_wallet_address
 PlayerResponse.model_validate = validate_wallet_address

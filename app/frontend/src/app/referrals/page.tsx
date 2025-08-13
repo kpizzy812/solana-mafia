@@ -7,12 +7,13 @@
 import React from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletButton } from '@/components/wallet/WalletButton';
-import { Copy, Users, TrendingUp, Award, Info, CheckCircle } from 'lucide-react';
+import { Copy, Users, TrendingUp, Award, Info, CheckCircle, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useTranslation } from '@/locales';
 import { useReferralCode, useReferralActions } from '@/stores/useReferralStore';
+import { useWalletConnect } from '@/hooks/useWalletConnect';
 import { ReferralStats, ReferralsList, PrestigeDisplay, CommissionRates, SolBalance } from './components';
 
 export default function ReferralsPage() {
@@ -20,6 +21,13 @@ export default function ReferralsPage() {
   const { language, setLanguage, isLoaded: languageLoaded } = useLanguage();
   const referralCode = useReferralCode();
   const { getReferralLink } = useReferralActions();
+  
+  // Get real referral code from wallet connection
+  const { 
+    userReferralCode, 
+    isConnecting: isWalletConnecting, 
+    error: walletConnectError 
+  } = useWalletConnect();
   
   const t = useTranslation(language);
 
@@ -29,9 +37,12 @@ export default function ReferralsPage() {
       return;
     }
 
+    if (!userReferralCode) {
+      toast.error(language === 'ru' ? 'Реферальный код загружается...' : 'Referral code is loading...');
+      return;
+    }
+
     try {
-      // Get user's referral code (placeholder - replace with actual API call)
-      const userReferralCode = publicKey.toString().slice(0, 8).toUpperCase();
       const referralLink = getReferralLink(userReferralCode);
       
       await navigator.clipboard.writeText(referralLink);
@@ -103,11 +114,27 @@ export default function ReferralsPage() {
                 
                 <div className="flex gap-3">
                   <div className="flex-1 bg-muted rounded-lg p-3 font-mono text-sm break-all">
-                    {getReferralLink(publicKey.toString().slice(0, 8).toUpperCase())}
+                    {isWalletConnecting ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {language === 'ru' ? 'Загрузка реферальной ссылки...' : 'Loading referral link...'}
+                      </div>
+                    ) : userReferralCode ? (
+                      getReferralLink(userReferralCode)
+                    ) : walletConnectError ? (
+                      <span className="text-red-400">
+                        {language === 'ru' ? 'Ошибка загрузки' : 'Loading error'}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {language === 'ru' ? 'Подключите кошелек' : 'Connect wallet'}
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={handleCopyReferralLink}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+                    disabled={!userReferralCode || isWalletConnecting}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Copy className="w-4 h-4" />
                     {t.referrals.copy}
@@ -117,7 +144,18 @@ export default function ReferralsPage() {
                 <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
                   <Info className="w-4 h-4" />
                   {t.referrals.yourReferralCode} <span className="font-mono font-semibold">
-                    {publicKey.toString().slice(0, 8).toUpperCase()}
+                    {isWalletConnecting ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        {language === 'ru' ? 'Загрузка...' : 'Loading...'}
+                      </span>
+                    ) : userReferralCode ? (
+                      userReferralCode
+                    ) : (
+                      <span className="text-red-400">
+                        {language === 'ru' ? 'Не загружен' : 'Not loaded'}
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>

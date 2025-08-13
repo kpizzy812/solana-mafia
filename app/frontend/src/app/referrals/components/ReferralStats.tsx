@@ -55,9 +55,9 @@ export function ReferralStats() {
         const response = await apiClient.get(`/referrals/${publicKey.toString()}/stats`);
         
         if (response.success) {
-          setStats(response);
+          setStats(response.data || response);
         } else {
-          setError('Failed to load referral statistics');
+          setError(response.error || 'Failed to load referral statistics');
         }
       } catch (err) {
         console.error('Failed to fetch referral stats:', err);

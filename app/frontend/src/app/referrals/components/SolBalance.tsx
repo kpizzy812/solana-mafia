@@ -5,7 +5,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Wallet, ArrowUpRight, History, Info, Loader2, AlertCircle, CheckCircle, DollarSign } from 'lucide-react';
+import { Wallet, ArrowUpRight, History, Info, Loader2, AlertCircle, CheckCircle, DollarSign, Clock } from 'lucide-react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '@/lib/api';
@@ -57,11 +57,11 @@ export function SolBalance() {
         ]);
         
         if (balanceResponse.success) {
-          setBalance(balanceResponse);
+          setBalance(balanceResponse.data || balanceResponse);
         }
         
         if (historyResponse.success) {
-          setWithdrawalHistory(historyResponse.withdrawals || []);
+          setWithdrawalHistory(historyResponse.data?.withdrawals || historyResponse.withdrawals || []);
         }
       } catch (err) {
         console.error('Failed to fetch SOL balance:', err);
@@ -112,8 +112,8 @@ export function SolBalance() {
           apiClient.get(`/referrals/${publicKey.toString()}/withdrawals`)
         ]);
         
-        if (balanceResponse.success) setBalance(balanceResponse);
-        if (historyResponse.success) setWithdrawalHistory(historyResponse.withdrawals || []);
+        if (balanceResponse.success) setBalance(balanceResponse.data || balanceResponse);
+        if (historyResponse.success) setWithdrawalHistory(historyResponse.data?.withdrawals || historyResponse.withdrawals || []);
       } else {
         toast.error('Failed to submit withdrawal request');
       }
