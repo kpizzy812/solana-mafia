@@ -1,0 +1,54 @@
+"""
+Types for earnings processing.
+"""
+
+from datetime import datetime
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Optional, List
+
+from solders.pubkey import Pubkey
+
+
+class ProcessorStatus(Enum):
+    """Status of the earnings processor."""
+    IDLE = "idle"
+    RUNNING = "running" 
+    FAILED = "failed"
+    COMPLETED = "completed"
+
+
+@dataclass
+class ProcessorStats:
+    """Statistics for processor operations."""
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    total_players_found: int = 0
+    players_needing_update: int = 0
+    successful_updates: int = 0
+    failed_updates: int = 0
+    batch_reads_attempted: int = 0
+    batch_reads_successful: int = 0
+    individual_reads_fallback: int = 0
+    database_sync_time: float = 0.0
+    total_processing_time: float = 0.0
+    errors: List[str] = field(default_factory=list)
+    
+    @property
+    def success_rate(self) -> float:
+        if self.players_needing_update == 0:
+            return 0.0
+        return self.successful_updates / self.players_needing_update
+
+
+@dataclass
+class PlayerAccountData:
+    """Parsed player account data from blockchain."""
+    wallet: str
+    pubkey: Pubkey
+    pending_earnings: int
+    next_earnings_time: int
+    last_auto_update: int  
+    businesses_count: int
+    needs_update: bool
+    raw_data: bytes

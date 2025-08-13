@@ -4,11 +4,13 @@ Provides methods for fetching transactions, account data, and program logs.
 """
 
 import asyncio
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Callable
 from dataclasses import dataclass
 from datetime import datetime
 import base64
 import json
+import websockets
+import uuid
 
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Commitment
@@ -150,6 +152,7 @@ class SolanaClient:
     async def get_transaction(self, signature: str) -> Optional[TransactionInfo]:
         """Get detailed transaction information."""
         try:
+            self.logger.info(f"🔍 SolanaClient: Requesting transaction {signature[:20]}...")
             sig = Signature.from_string(signature)
             response = await self.client.get_transaction(
                 sig,
@@ -157,15 +160,20 @@ class SolanaClient:
                 max_supported_transaction_version=0
             )
             
+            self.logger.info(f"📡 SolanaClient: Got response for {signature[:20]}... - response.value: {response.value is not None}")
+            
             if not response.value:
+                self.logger.warning(f"❌ SolanaClient: No transaction data returned for {signature[:20]}...")
                 return None
                 
             tx = response.value
-            meta = tx.meta
+            meta = tx.transaction.meta
             
             if not meta:
+                self.logger.warning(f"❌ SolanaClient: No meta data for {signature[:20]}...")
                 return None
                 
+            self.logger.info(f"✅ SolanaClient: Successfully parsed transaction {signature[:20]}... slot: {tx.slot}")
             # Parse transaction data
             transaction_info = TransactionInfo(
                 signature=signature,
@@ -173,18 +181,18 @@ class SolanaClient:
                 block_time=datetime.fromtimestamp(tx.block_time) if tx.block_time else None,
                 success=meta.err is None,
                 logs=meta.log_messages or [],
-                accounts=[str(acc) for acc in tx.transaction.message.account_keys],
+                accounts=[str(acc) for acc in tx.transaction.transaction.message.account_keys],
                 instructions=[],
                 events=[]
             )
             
             # Parse instructions
-            if hasattr(tx.transaction.message, 'instructions'):
-                for idx, instr in enumerate(tx.transaction.message.instructions):
+            if hasattr(tx.transaction.transaction.message, 'instructions'):
+                for idx, instr in enumerate(tx.transaction.transaction.message.instructions):
                     instruction_data = {
                         "program_id_index": instr.program_id_index,
                         "accounts": list(instr.accounts),
-                        "data": base64.b64encode(instr.data).decode() if instr.data else "",
+                        "data": str(instr.data) if instr.data else "",
                         "index": idx
                     }
                     transaction_info.instructions.append(instruction_data)
@@ -346,6 +354,234 @@ class SolanaClient:
         except Exception as e:
             self.logger.error("Failed to start monitoring", error=str(e))
             raise SolanaRPCError(f"Failed to monitor program logs: {e}")
+    
+    async def monitor_program_logs_realtime(
+        self,
+        callback: Callable[[TransactionInfo], Any],
+        auto_reconnect: bool = True
+    ):
+        """
+        🚀 ENHANCED Real-time WebSocket monitoring with Helius support.
+        Provides instant notifications with robust error handling and reconnection.
+        """
+        # Use configured WebSocket URL from settings (Helius support)
+        ws_config = SolanaConfig.get_websocket_config()
+        ws_url = ws_config["endpoint"]
+        
+        reconnect_attempts = 0
+        max_reconnect_attempts = 10
+        base_retry_delay = 2
+        
+        while reconnect_attempts < max_reconnect_attempts:
+            try:
+                self.logger.info("🔌 Connecting to Helius WebSocket", url=ws_url, attempt=reconnect_attempts + 1)
+                
+                # Enhanced connection with custom headers and timeout
+                headers = {
+                    "User-Agent": "SolanaMafia-Backend/1.0",
+                    "Origin": "https://localhost:8000"
+                }
+                
+                async with websockets.connect(
+                    ws_url, 
+                    ping_interval=30, 
+                    ping_timeout=10,
+                    close_timeout=5,
+                    extra_headers=headers,
+                    max_size=None  # Remove message size limit
+                ) as websocket:
+                    # Subscribe to program logs with enhanced parameters
+                    subscription_id = str(uuid.uuid4())
+                    subscribe_msg = {
+                        "jsonrpc": "2.0",
+                        "id": subscription_id,
+                        "method": "logsSubscribe",
+                        "params": [
+                            {
+                                "mentions": [str(self.program_id)]
+                            },
+                            {
+                                "commitment": "confirmed"
+                            }
+                        ]
+                    }
+                    
+                    await websocket.send(json.dumps(subscribe_msg))
+                    self.logger.info("✅ Subscribed to program logs", program_id=str(self.program_id))
+                    
+                    # Reset reconnect counter on successful connection
+                    reconnect_attempts = 0
+                    
+                    # Process incoming messages with enhanced error handling
+                    async for raw_message in websocket:
+                        try:
+                            message = json.loads(raw_message)
+                            
+                            # Skip subscription confirmation
+                            if "id" in message and message.get("id") == subscription_id:
+                                sub_id = message.get("result")
+                                self.logger.info("🎯 WebSocket subscription confirmed", subscription_id=sub_id)
+                                continue
+                            
+                            # Process log notification
+                            if "method" in message and message["method"] == "logsNotification":
+                                await self._process_log_notification_enhanced(message, callback)
+                            
+                            # Handle errors in subscription
+                            elif "error" in message:
+                                self.logger.error("❌ WebSocket subscription error", error=message["error"])
+                                raise SolanaRPCError(f"Subscription error: {message['error']}")
+                                
+                        except json.JSONDecodeError as e:
+                            self.logger.error("🚨 Failed to parse WebSocket message", error=str(e), raw_message=raw_message[:200])
+                        except Exception as e:
+                            self.logger.error("⚠️ Error processing WebSocket message", error=str(e), error_type=type(e).__name__)
+                            continue
+                            
+            except websockets.exceptions.ConnectionClosed as e:
+                reconnect_attempts += 1
+                if auto_reconnect and reconnect_attempts < max_reconnect_attempts:
+                    retry_delay = min(base_retry_delay * (2 ** reconnect_attempts), 60)
+                    self.logger.warning(
+                        "🔄 WebSocket connection closed, reconnecting", 
+                        error=str(e), 
+                        attempt=reconnect_attempts,
+                        retry_delay=retry_delay
+                    )
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    self.logger.error("❌ Max reconnection attempts reached", attempts=reconnect_attempts)
+                    break
+                    
+            except websockets.exceptions.InvalidURI as e:
+                self.logger.error("❌ Invalid WebSocket URI", url=ws_url, error=str(e))
+                raise SolanaRPCError(f"Invalid WebSocket URI: {ws_url} - {e}")
+                
+            except OSError as e:
+                reconnect_attempts += 1
+                if "Connection refused" in str(e) or "Name or service not known" in str(e):
+                    self.logger.error("❌ WebSocket endpoint not available", url=ws_url, error=str(e))
+                    if auto_reconnect and reconnect_attempts < max_reconnect_attempts:
+                        retry_delay = min(base_retry_delay * reconnect_attempts, 30)
+                        self.logger.info(f"🔄 Retrying connection in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        raise SolanaRPCError(f"WebSocket endpoint not available: {e}")
+                else:
+                    self.logger.error("🚨 WebSocket network error", error=str(e))
+                    if auto_reconnect and reconnect_attempts < max_reconnect_attempts:
+                        await asyncio.sleep(base_retry_delay * reconnect_attempts)
+                        continue
+                    else:
+                        raise SolanaRPCError(f"WebSocket network error: {e}")
+                        
+            except Exception as e:
+                reconnect_attempts += 1
+                self.logger.error(
+                    "⚠️ Unexpected WebSocket error", 
+                    error=str(e), 
+                    error_type=type(e).__name__,
+                    attempt=reconnect_attempts
+                )
+                if auto_reconnect and reconnect_attempts < max_reconnect_attempts:
+                    retry_delay = min(base_retry_delay * reconnect_attempts, 60)
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    raise SolanaRPCError(f"Failed to monitor program logs via WebSocket: {e}")
+        
+        self.logger.error("❌ WebSocket monitoring stopped after max retry attempts")
+    
+    async def _process_log_notification_enhanced(self, message: Dict[str, Any], callback: Callable[[TransactionInfo], Any]):
+        """
+        🚀 ENHANCED log notification processing with EventParser integration.
+        Provides immediate event parsing and robust error handling.
+        """
+        try:
+            params = message.get("params", {})
+            result = params.get("result", {})
+            context = result.get("context", {})
+            value = result.get("value", {})
+            
+            signature = value.get("signature")
+            logs = value.get("logs", [])
+            slot = context.get("slot", 0)
+            
+            if not signature:
+                self.logger.debug("❌ No signature in log notification", result=result)
+                return
+            
+            self.logger.info("🔥 Received real-time log notification", signature=signature[:20], slot=slot, logs_count=len(logs))
+            
+            # 🚀 FAST TRACK: Parse events directly from logs without fetching full transaction
+            if logs:
+                try:
+                    from app.services.event_parser import get_event_parser
+                    parser = get_event_parser()
+                    
+                    # Parse events directly from WebSocket logs (MUCH FASTER!)
+                    parsed_events = parser.parse_logs_for_events(
+                        logs=logs,
+                        signature=signature,
+                        slot=slot,
+                        block_time=None  # Will be estimated
+                    )
+                    
+                    if parsed_events:
+                        self.logger.info(
+                            "✅ Fast-track parsed events from logs", 
+                            signature=signature[:20],
+                            event_count=len(parsed_events),
+                            event_types=[e.event_type.value for e in parsed_events]
+                        )
+                        
+                        # Create minimal TransactionInfo for fast processing
+                        fast_tx_info = TransactionInfo(
+                            signature=signature,
+                            slot=slot,
+                            block_time=None,  # Will be fetched later if needed
+                            success=True,
+                            logs=logs,
+                            accounts=[],
+                            instructions=[],
+                            events=[{"event_type": e.event_type.value, "data": e.data} for e in parsed_events]
+                        )
+                        
+                        # Trigger callback immediately with parsed events
+                        await callback(fast_tx_info)
+                        return
+                        
+                except Exception as e:
+                    self.logger.warning("⚠️ Fast-track parsing failed, falling back to full transaction fetch", error=str(e))
+            
+            # FALLBACK: Fetch full transaction details (slower but comprehensive)
+            try:
+                self.logger.debug("🐌 Falling back to full transaction fetch", signature=signature[:20])
+                tx_info = await self.get_transaction(signature)
+                if tx_info:
+                    if tx_info.events:
+                        self.logger.info(
+                            "✅ Full transaction processed", 
+                            signature=signature[:20], 
+                            events_count=len(tx_info.events)
+                        )
+                        await callback(tx_info)
+                    else:
+                        self.logger.debug("ℹ️ Transaction has no events", signature=signature[:20])
+                else:
+                    self.logger.warning("❌ Failed to fetch transaction details", signature=signature[:20])
+                    
+            except Exception as e:
+                self.logger.error("❌ Failed to fetch full transaction", signature=signature[:20], error=str(e))
+            
+        except Exception as e:
+            self.logger.error("❌ Failed to process log notification", error=str(e), message_keys=list(message.keys()) if message else [])
+
+    async def _process_log_notification(self, message: Dict[str, Any], callback: Callable[[TransactionInfo], Any]):
+        """Legacy log notification processing - redirects to enhanced version."""
+        await self._process_log_notification_enhanced(message, callback)
 
 
 # Global client instance

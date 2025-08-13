@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# Короткий алиас для solana-mafia-cli.sh
+exec "$(dirname "$0")/solana-mafia-cli.sh" "$@"

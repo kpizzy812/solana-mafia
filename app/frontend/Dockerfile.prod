@@ -1,0 +1,72 @@
+# Multi-stage build for production
+FROM node:20-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies for node-gyp and usb package
+RUN apk add --no-cache python3 make g++ linux-headers eudev-dev libusb-dev
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (needed for build)
+RUN npm ci --legacy-peer-deps --no-optional
+
+# Debug: Show current working directory before copy
+RUN echo "=== DEBUG: PWD before copy ===" && pwd
+
+# Copy application code
+COPY . .
+
+# Debug: Check what was copied
+RUN echo "=== DEBUG: Files in /app ===" && ls -la
+RUN echo "=== DEBUG: Files in /app/src ===" && ls -la src/ || echo "src/ not found"
+RUN echo "=== DEBUG: All files recursively ===" && find . -name "lib" -type d
+RUN echo "=== DEBUG: Any lib files ===" && find . -name "*.ts" | grep lib || echo "No lib .ts files found"
+RUN echo "=== DEBUG: Files in /app/src/lib ===" && ls -la src/lib/ || echo "src/lib/ not found"
+
+# Build the application
+RUN npm run build
+
+# Clean dev dependencies after build
+RUN npm prune --production --legacy-peer-deps
+
+# Production image
+FROM node:20-alpine AS runner
+
+# Set working directory
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
+# Copy built application
+COPY --from=builder /app/next.config.* ./
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/package.json ./package.json
+
+# Change ownership to non-root user
+RUN chown -R nextjs:nodejs /app
+USER nextjs
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000 || exit 1
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# Start the application
+CMD ["node", "server.js"]

@@ -228,11 +228,7 @@ dependencies = [
  "anchor-lang",
  "mpl-token-metadata",
  "spl-associated-token-account",
- "spl-pod",
  "spl-token",
- "spl-token-2022",
- "spl-token-group-interface",
- "spl-token-metadata-interface",
 ]
 
 [[package]]

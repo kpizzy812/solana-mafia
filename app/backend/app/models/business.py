@@ -3,7 +3,10 @@ Business and BusinessSlot models - mirror on-chain business data.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .player import Player
 from enum import Enum
 
 from sqlalchemy import (
@@ -42,18 +45,19 @@ class Business(BaseModel, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     
     # Foreign keys
-    player_wallet: Mapped[str] = mapped_column(
-        String(44),
-        ForeignKey("players.wallet", ondelete="CASCADE"),
-        comment="Owner's wallet address"
+    owner_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        comment="Owner's user ID"
     )
     
-    nft_mint: Mapped[Optional[str]] = mapped_column(
+    player_wallet: Mapped[Optional[str]] = mapped_column(
         String(44),
-        ForeignKey("business_nfts.mint", ondelete="SET NULL"),
-        comment="Associated NFT mint address",
-        index=True
+        ForeignKey("players.wallet", ondelete="CASCADE"),
+        comment="Player's wallet address (for Player relationship)"
     )
+    
+    # Убрано nft_mint поле - NFT больше не используются
     
     # Business properties
     business_type: Mapped[BusinessType] = mapped_column(
@@ -63,8 +67,8 @@ class Business(BaseModel, TimestampMixin):
     
     level: Mapped[int] = mapped_column(
         Integer,
-        default=1,
-        comment="Business upgrade level"
+        default=0,
+        comment="Business upgrade level (0-3, matches contract upgrade_level)"
     )
     
     # Investment tracking
@@ -127,22 +131,24 @@ class Business(BaseModel, TimestampMixin):
     )
     
     # Relationships
-    player: Mapped["Player"] = relationship(
+    owner_user: Mapped["User"] = relationship(
+        "User",
+        back_populates="businesses"
+    )
+    
+    player: Mapped[Optional["Player"]] = relationship(
         "Player",
         back_populates="businesses"
     )
     
-    nft: Mapped[Optional["BusinessNFT"]] = relationship(
-        "BusinessNFT",
-        back_populates="business"
-    )
+    # Убрано nft relationship - NFT больше не используются
     
     # Indexes
     __table_args__ = (
+        Index("idx_business_owner_active", "owner_id", "is_active"),
         Index("idx_business_player_active", "player_wallet", "is_active"),
         Index("idx_business_type_level", "business_type", "level"),
-        Index("idx_business_nft", "nft_mint"),
-        Index("idx_business_slot", "player_wallet", "slot_index"),
+        Index("idx_business_slot", "owner_id", "slot_index"),
     )
     
     def __repr__(self) -> str:
@@ -186,11 +192,17 @@ class BusinessSlot(BaseModel, TimestampMixin):
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     
-    # Foreign key
-    player_wallet: Mapped[str] = mapped_column(
+    # Foreign keys
+    owner_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        comment="Owner's user ID"
+    )
+    
+    player_wallet: Mapped[Optional[str]] = mapped_column(
         String(44),
         ForeignKey("players.wallet", ondelete="CASCADE"),
-        comment="Owner's wallet address"
+        comment="Player's wallet address (for Player relationship)"
     )
     
     # Slot properties
@@ -244,18 +256,22 @@ class BusinessSlot(BaseModel, TimestampMixin):
     )
     
     # Relationships
-    player: Mapped["Player"] = relationship("Player")
+    owner_user: Mapped["User"] = relationship("User")
+    player: Mapped[Optional["Player"]] = relationship(
+        "Player",
+        foreign_keys=[player_wallet]
+    )
     business: Mapped[Optional["Business"]] = relationship("Business")
     
     # Indexes
     __table_args__ = (
-        Index("idx_slot_player_index", "player_wallet", "slot_index", unique=True),
-        Index("idx_slot_player_unlocked", "player_wallet", "is_unlocked"),
+        Index("idx_slot_owner_index", "owner_id", "slot_index", unique=True),
+        Index("idx_slot_owner_unlocked", "owner_id", "is_unlocked"),
         Index("idx_slot_type", "slot_type"),
     )
     
     def __repr__(self) -> str:
-        return f"<BusinessSlot(player={self.player_wallet}, index={self.slot_index}, type={self.slot_type.name})>"
+        return f"<BusinessSlot(owner={self.owner_id}, index={self.slot_index}, type={self.slot_type.name})>"
     
     @property
     def is_occupied(self) -> bool:

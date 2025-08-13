@@ -13,9 +13,11 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.api.middleware import add_middleware
 from app.api.schemas.common import HealthCheckResponse, APIResponse
-from app.api.routes import players, businesses, earnings, stats, tma
+from app.api.routes import players, businesses, earnings, stats, tma, referrals, prestige, transactions, quests, leaderboards
 from app.indexer.event_indexer import get_event_indexer
 from app.scheduler.earnings_scheduler import get_earnings_scheduler
+from app.scheduler.prestige_scheduler import get_prestige_scheduler
+from app.services.signature_processor import get_signature_processor
 
 
 logger = structlog.get_logger(__name__)
@@ -29,13 +31,19 @@ async def lifespan(app: FastAPI):
     
     # Initialize services
     try:
+        # Start signature processor (always needed)
+        signature_processor = await get_signature_processor()
+        logger.info("Signature processor started")
+        
         if settings.is_production:
             # Start background services in production
             event_indexer = await get_event_indexer()
             earnings_scheduler = await get_earnings_scheduler()
+            prestige_scheduler = await get_prestige_scheduler()
             
             await event_indexer.start()
             await earnings_scheduler.start()
+            await prestige_scheduler.start()
             
             logger.info("Background services started")
     except Exception as e:
@@ -47,13 +55,20 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Solana Mafia API server")
     
     try:
+        # Stop signature processor
+        from app.services.signature_processor import shutdown_signature_processor
+        await shutdown_signature_processor()
+        logger.info("Signature processor stopped")
+        
         if settings.is_production:
             # Stop background services
             from app.indexer.event_indexer import shutdown_event_indexer
             from app.scheduler.earnings_scheduler import shutdown_earnings_scheduler
+            from app.scheduler.prestige_scheduler import shutdown_prestige_scheduler
             
             await shutdown_event_indexer()
             await shutdown_earnings_scheduler()
+            await shutdown_prestige_scheduler()
             
             logger.info("Background services stopped")
     except Exception as e:
@@ -77,7 +92,6 @@ def create_app() -> FastAPI:
         * **Player Management** - Create and manage player accounts
         * **Business Operations** - Create, upgrade, and sell businesses
         * **Earnings System** - Automatic earnings distribution and claiming
-        * **NFT Integration** - Business ownership via NFTs
         * **Real-time Updates** - Live data from Solana blockchain
         
         ## Authentication
@@ -212,6 +226,36 @@ def create_app() -> FastAPI:
         tma.router,
         prefix=f"{settings.api_v1_prefix}",
         tags=["Telegram Mini Apps"]
+    )
+    
+    app.include_router(
+        referrals.router,
+        prefix=f"{settings.api_v1_prefix}/referrals",
+        tags=["Referrals"]
+    )
+    
+    app.include_router(
+        prestige.router,
+        prefix=f"{settings.api_v1_prefix}/prestige",
+        tags=["Prestige"]
+    )
+    
+    app.include_router(
+        transactions.router,
+        prefix=f"{settings.api_v1_prefix}/transactions",
+        tags=["Transactions"]
+    )
+    
+    app.include_router(
+        quests.router,
+        prefix=f"{settings.api_v1_prefix}/quests",
+        tags=["Quests"]
+    )
+    
+    app.include_router(
+        leaderboards.router,
+        prefix=f"{settings.api_v1_prefix}/leaderboards",
+        tags=["Leaderboards"]
     )
     
     logger.info("FastAPI application created successfully")

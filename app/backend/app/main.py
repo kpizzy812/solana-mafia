@@ -2,6 +2,7 @@
 Main FastAPI application entry point.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
@@ -11,7 +12,7 @@ from app.core.logging import setup_logging
 from app.core.database import init_database, close_database
 from app.api.middleware import add_middleware
 from app.api.schemas.common import HealthCheckResponse, APIResponse
-from app.api.routes import players, businesses, earnings, stats
+from app.api.routes import players, businesses, earnings, stats, transactions, referrals, prestige, quests, leaderboards
 from app.websocket.websocket_handler import websocket_handler, get_websocket_stats
 from app.admin.admin_routes import admin_router
 
@@ -32,9 +33,19 @@ async def lifespan(app: FastAPI):
         await init_database()
         logger.info("Database initialized successfully")
         
-        # Initialize background services if needed
+        # Start signature processor (always needed)
+        from app.services.signature_processor import get_signature_processor
+        signature_processor = await get_signature_processor()
+        logger.info("Signature processor started")
+        
+        # Initialize background services
+        if settings.dynamic_pricing_enabled:
+            from app.services.dynamic_pricing_service import dynamic_pricing_service
+            logger.info("Starting dynamic pricing service")
+            asyncio.create_task(dynamic_pricing_service.start_price_monitoring())
+            
         if settings.is_production:
-            logger.info("Production mode - background services would start here")
+            logger.info("Production mode - additional services initialized")
             
     except Exception as e:
         logger.error("Startup failed", error=str(e))
@@ -47,6 +58,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down application")
     try:
+        # Stop signature processor
+        from app.services.signature_processor import shutdown_signature_processor
+        await shutdown_signature_processor()
+        logger.info("Signature processor stopped")
+        
         await close_database()
         logger.info("Database connections closed")
     except Exception as e:
@@ -70,6 +86,7 @@ app = FastAPI(
     * **NFT Integration** - Business ownership via NFTs
     * **Real-time Updates** - Live data from Solana blockchain
     * **WebSocket Support** - Real-time notifications and updates
+    * **Leaderboards** - Rankings by earnings, referrals, and prestige
     
     ## Authentication
     
@@ -154,7 +171,8 @@ async def root():
                 "Business Operations", 
                 "Earnings System",
                 "NFT Integration",
-                "Real-time Updates"
+                "Real-time Updates",
+                "Leaderboards & Rankings"
             ]
         }
     )
@@ -212,6 +230,36 @@ app.include_router(
     stats.router,
     prefix=f"{settings.api_v1_prefix}/stats",
     tags=["Statistics"]
+)
+
+app.include_router(
+    transactions.router,
+    prefix=f"{settings.api_v1_prefix}/transactions",
+    tags=["Transactions"]
+)
+
+app.include_router(
+    referrals.router,
+    prefix=f"{settings.api_v1_prefix}/referrals",
+    tags=["Referrals"]
+)
+
+app.include_router(
+    prestige.router,
+    prefix=f"{settings.api_v1_prefix}/prestige",
+    tags=["Prestige"]
+)
+
+app.include_router(
+    quests.router,
+    prefix=f"{settings.api_v1_prefix}/quests",
+    tags=["Quests"]
+)
+
+app.include_router(
+    leaderboards.router,
+    prefix=f"{settings.api_v1_prefix}/leaderboards",
+    tags=["Leaderboards"]
 )
 
 # Admin endpoints

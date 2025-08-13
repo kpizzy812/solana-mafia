@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-solana_mafia_db}
+      POSTGRES_USER: ${POSTGRES_USER:-solana_mafia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-solana_mafia} -d ${POSTGRES_DB:-solana_mafia_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: bash -c "python -m alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # Frontend Application
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env.prod
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: npm start
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # Event Indexer Service
+  indexer:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: python -m app.indexer.main
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # Earnings Scheduler Service
+  scheduler:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: python -m app.scheduler.main
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # WebSocket Server
+  websocket:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./.env.prod
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: python -m app.websocket.main
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # Telegram Bot Service (optional)
+  telegram-bot:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env.prod
+    profiles:
+      - telegram
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: python -m app.services.telegram_bot_service
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    networks:
+      - solana-mafia-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  solana-mafia-network:
+    driver: bridge

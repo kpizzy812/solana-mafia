@@ -44,7 +44,6 @@ class User(BaseModel, TimestampMixin):
     wallet_address: Mapped[Optional[str]] = mapped_column(
         String(44),
         unique=True,
-        index=True,
         comment="Solana wallet address"
     )
     
@@ -52,7 +51,6 @@ class User(BaseModel, TimestampMixin):
     telegram_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         unique=True,
-        index=True,
         comment="Telegram user ID"
     )
     
@@ -177,8 +175,8 @@ class User(BaseModel, TimestampMixin):
         comment="Whether user is banned"
     )
     
-    # Metadata
-    metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+    # User metadata
+    user_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON,
         comment="Additional user metadata"
     )

@@ -28,6 +28,10 @@ class APIResponse(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
+# Alias for backward compatibility
+BaseResponse = APIResponse
+
+
 class SuccessResponse(APIResponse):
     """Success response model."""
     data: Optional[Any] = None
@@ -122,9 +126,7 @@ class EventType(str, Enum):
     BUSINESS_SOLD = "BusinessSold"
     EARNINGS_UPDATED = "EarningsUpdated"
     EARNINGS_CLAIMED = "EarningsClaimed"
-    NFT_MINTED = "BusinessNFTMinted"
-    NFT_BURNED = "BusinessNFTBurned"
-    NFT_UPGRADED = "BusinessNFTUpgraded"
+    # Убрано NFT события - NFT больше не используются
 
 
 class APIError(BaseModel):
@@ -144,17 +146,12 @@ class ValidationErrorResponse(ErrorResponse):
 # Common field types
 WalletField = Field(
     min_length=32,
-    max_length=44,
+    max_length=50,  # Relaxed validation
     pattern=r"^[A-Za-z0-9]+$",
     description="Solana wallet address"
 )
 
-NFTMintField = Field(
-    min_length=32,
-    max_length=44,
-    pattern=r"^[A-Za-z0-9]+$",
-    description="NFT mint address"
-)
+# Убрано NFTMintField - NFT больше не используются
 
 BusinessNameField = Field(
     min_length=1,

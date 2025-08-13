@@ -30,12 +30,3 @@ pub fn calculate_early_sell_fee(invested_amount: u64, days_held: u64) -> u64 {
     (invested_amount * fee_percent) / 100
 }
 
-/// Calculate referral bonus
-pub fn calculate_referral_bonus(amount: u64, level: u8) -> u64 {
-    if level == 0 || level as usize > MAX_REFERRAL_LEVELS {
-        return 0;
-    }
-    
-    let rate = REFERRAL_RATES[(level - 1) as usize];
-    (amount * rate as u64) / 100
-}

@@ -66,10 +66,56 @@ def create_websocket_app() -> FastAPI:
             "timestamp": datetime.utcnow().isoformat()
         }
     
+    @app.post("/notify")
+    async def send_notification(request_data: dict):
+        """HTTP endpoint for sending WebSocket notifications from other services."""
+        from .schemas import WebSocketMessage, MessageType
+        
+        try:
+            # Extract notification data
+            notification_type = request_data.get("type", "signature_processing")
+            user_wallet = request_data.get("user_wallet")
+            data = request_data.get("data", {})
+            
+            if not user_wallet:
+                return {"success": False, "error": "user_wallet is required"}
+            
+            # Create WebSocket message
+            message = WebSocketMessage(
+                type=MessageType.EVENT,
+                data=data
+            )
+            
+            # Send to specific wallet
+            connection_manager = get_connection_manager()
+            sent_count = await connection_manager.send_to_wallet(user_wallet, message)
+            
+            logger.info(
+                "📡 HTTP notification sent via WebSocket",
+                user_wallet=user_wallet,
+                sent_to=sent_count,
+                notification_type=notification_type
+            )
+            
+            return {
+                "success": True,
+                "sent_to": sent_count,
+                "message": f"Notification sent to {sent_count} connections"
+            }
+            
+        except Exception as e:
+            logger.error("Failed to send HTTP notification", error=str(e))
+            return {"success": False, "error": str(e)}
+    
     @app.on_event("startup")
     async def startup_event():
         """Initialize WebSocket server."""
         logger.info("Starting WebSocket server")
+        
+        # Initialize database
+        from app.core.database import init_database
+        await init_database()
+        logger.info("Database initialized for WebSocket server")
         
         # Initialize connection manager
         connection_manager = get_connection_manager()

@@ -48,6 +48,9 @@ pub enum SolanaMafiaError {
     #[msg("Too early to update earnings")]
     TooEarlyToUpdate,
 
+    #[msg("Earnings update not due yet")]
+    EarningsNotDue,
+
     // ⚙️ UPGRADE SYSTEM
     #[msg("Invalid upgrade level")]
     InvalidUpgradeLevel,
@@ -98,6 +101,27 @@ pub enum SolanaMafiaError {
 
     #[msg("Insufficient funds for slot unlock")]
     InsufficientFundsForSlot,
+
+    #[msg("Slot is empty")]
+    SlotEmpty,
+
+    #[msg("Slot already occupied")]
+    SlotAlreadyOccupied,
+
+    #[msg("Slot already paid")]
+    SlotAlreadyPaid,
+
+    #[msg("Business not active")]
+    BusinessNotActive,
+
+    #[msg("Maximum level reached")]
+    MaxLevelReached,
+
+    #[msg("No slots to unlock")]
+    NoSlotsToUnlock,
+
+    #[msg("No slots available")]
+    NoSlotsAvailable,
 
     // 🚫 ADMIN & EMERGENCY
     #[msg("Unauthorized admin action")]

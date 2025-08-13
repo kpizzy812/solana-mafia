@@ -1,6 +1,6 @@
 """
 Referral system business logic.
-Handles 3-level referral system with 5%, 2%, 1% commission rates.
+Handles 3-level referral system with 10%, 5%, 2.5% commission rates.
 """
 
 import secrets
@@ -21,6 +21,7 @@ from app.models.referral import (
 )
 from app.models.player import Player
 from app.core.exceptions import ValidationError, NotFoundError
+from app.models.prestige import ActionType
 
 logger = structlog.get_logger(__name__)
 
@@ -258,6 +259,12 @@ class ReferralService:
                 if not relation.first_earning_at:
                     relation.first_earning_at = datetime.utcnow()
                 
+                # Add commission to referrer's SOL balance
+                await self.add_sol_commission(
+                    user_id=relation.referrer_id,
+                    commission_amount_lamports=commission_amount
+                )
+                
                 logger.info(
                     "Created referral commission",
                     referrer_id=relation.referrer_id,
@@ -440,6 +447,13 @@ class ReferralService:
         )
         return result.scalar_one_or_none()
     
+    async def _get_user_by_wallet(self, wallet_address: str) -> Optional[User]:
+        """Get user by wallet address."""
+        result = await self.db.execute(
+            select(User).where(User.wallet_address == wallet_address)
+        )
+        return result.scalar_one_or_none()
+    
     async def _generate_unique_referral_code(self, length: int = 8) -> str:
         """Generate a unique referral code."""
         max_attempts = 10
@@ -500,6 +514,7 @@ class ReferralService:
                 .where(ReferralStats.user_id == relation.referrer_id)
                 .values({
                     f"level_{relation.level}_referrals": ReferralStats.__table__.c[f"level_{relation.level}_referrals"] + 1,
+                    "total_referrals": ReferralStats.__table__.c["total_referrals"] + 1,
                     "last_updated_at": datetime.utcnow()
                 })
             )
@@ -523,6 +538,7 @@ class ReferralService:
                 .where(ReferralStats.user_id == relation.referrer_id)
                 .values({
                     f"level_{relation.level}_earnings": ReferralStats.__table__.c[f"level_{relation.level}_earnings"] + commission.commission_amount,
+                    "total_referral_earnings": ReferralStats.__table__.c["total_referral_earnings"] + commission.commission_amount,
                     "pending_commission": ReferralStats.__table__.c["pending_commission"] + commission.commission_amount,
                     "last_updated_at": datetime.utcnow()
                 })
@@ -542,3 +558,394 @@ class ReferralService:
                 user_type=user.user_type if user else UserType.WALLET
             )
             self.db.add(stats)
+    
+    # ============================================================================
+    # PRESTIGE INTEGRATION METHODS
+    # ============================================================================
+    
+    async def award_referral_prestige(
+        self,
+        referrer_wallet: str,
+        referee_wallet: str,
+        action: str = "invited"
+    ) -> Optional[Tuple[int, bool]]:
+        """Award prestige points for referral activities.
+        
+        Args:
+            referrer_wallet: Wallet of the referrer
+            referee_wallet: Wallet of the referee  
+            action: Type of referral action ("invited", "first_business", "network_bonus")
+            
+        Returns:
+            Tuple of (points_awarded, level_up_occurred) or None if service unavailable
+        """
+        try:
+            # Import here to avoid circular dependency
+            from app.services.prestige_service import get_prestige_service
+            
+            prestige_service = await get_prestige_service(self.db)
+            
+            if action == "invited":
+                # Award points for successful referral invitation
+                return await prestige_service.award_referral_points(
+                    referrer_wallet=referrer_wallet,
+                    referee_wallet=referee_wallet,
+                    referee_points=0,  # Fixed bonus
+                    referral_type="invited"
+                )
+            
+            elif action == "first_business":
+                # Award points when referee buys their first business
+                return await prestige_service.award_referral_points(
+                    referrer_wallet=referrer_wallet,
+                    referee_wallet=referee_wallet,
+                    referee_points=0,  # Fixed bonus
+                    referral_type="first_business"
+                )
+            
+            elif action == "network_bonus":
+                # Award percentage of referee's points to referrer
+                referee = await self._get_player_by_wallet(referee_wallet)
+                if referee and referee.prestige_points > 0:
+                    return await prestige_service.award_referral_points(
+                        referrer_wallet=referrer_wallet,
+                        referee_wallet=referee_wallet,
+                        referee_points=referee.prestige_points,
+                        referral_type="network_bonus"
+                    )
+            
+            return None
+            
+        except Exception as e:
+            logger.error(
+                "Failed to award referral prestige",
+                referrer=referrer_wallet,
+                referee=referee_wallet,
+                action=action,
+                error=str(e)
+            )
+            return None
+    
+    async def process_referral_with_prestige(
+        self,
+        referral_code: str,
+        referee_id: str,
+        referee_type: UserType,
+        **referee_data
+    ) -> Optional[Dict[str, Any]]:
+        """Process referral and award prestige points."""
+        # Process normal referral
+        relations = await self.process_referral(
+            referral_code=referral_code,
+            referee_id=referee_id,
+            referee_type=referee_type,
+            **referee_data
+        )
+        
+        if not relations:
+            return None
+        
+        # Award prestige points to referrer
+        referrer_wallet = relations[0].referrer_id  # Level 1 referrer
+        prestige_result = await self.award_referral_prestige(
+            referrer_wallet=referrer_wallet,
+            referee_wallet=referee_id,
+            action="invited"
+        )
+        
+        result = {
+            "referral_relations": len(relations),
+            "referrer_wallet": referrer_wallet,
+            "prestige_awarded": prestige_result[0] if prestige_result else 0,
+            "level_up_occurred": prestige_result[1] if prestige_result else False
+        }
+        
+        logger.info(
+            "Referral processed with prestige",
+            referee_id=referee_id,
+            referrer_wallet=referrer_wallet,
+            **result
+        )
+        
+        return result
+    
+    async def notify_referee_first_business(
+        self,
+        referee_wallet: str,
+        business_cost: int
+    ) -> None:
+        """Notify when referee buys their first business."""
+        # Find all referrers for this referee
+        result = await self.db.execute(
+            select(ReferralRelation).where(
+                and_(
+                    ReferralRelation.referee_id == referee_wallet,
+                    ReferralRelation.level == 1,  # Only direct referrer
+                    ReferralRelation.is_active == True
+                )
+            )
+        )
+        relation = result.scalar_one_or_none()
+        
+        if relation:
+            # Award prestige to referrer
+            await self.award_referral_prestige(
+                referrer_wallet=relation.referrer_id,
+                referee_wallet=referee_wallet,
+                action="first_business"
+            )
+            
+            logger.info(
+                "Referrer awarded for referee's first business",
+                referrer=relation.referrer_id,
+                referee=referee_wallet,
+                business_cost=business_cost
+            )
+    
+    async def _get_player_by_wallet(self, wallet: str) -> Optional[Player]:
+        """Get player by wallet address."""
+        result = await self.db.execute(
+            select(Player).where(Player.wallet == wallet)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_referrers(self, referee_wallet: str) -> List[Dict[str, Any]]:
+        """Get all referrers for a given referee."""
+        result = await self.db.execute(
+            select(ReferralRelation).where(
+                and_(
+                    ReferralRelation.referee_id == referee_wallet,
+                    ReferralRelation.is_active == True
+                )
+            ).order_by(ReferralRelation.level)
+        )
+        relations = result.scalars().all()
+        
+        referrers = []
+        for relation in relations:
+            referrers.append({
+                "referrer_id": relation.referrer_id,
+                "level": relation.level,
+                "commission_rate": float(relation.commission_rate)
+            })
+        
+        return referrers
+    
+    # ============================================================================
+    # SOL BALANCE MANAGEMENT METHODS
+    # ============================================================================
+    
+    async def add_sol_commission(
+        self,
+        user_id: str,
+        commission_amount_lamports: int
+    ) -> None:
+        """Add SOL commission to user's internal balance."""
+        await self._ensure_referral_stats(user_id)
+        
+        # Update SOL balance
+        await self.db.execute(
+            update(ReferralStats)
+            .where(ReferralStats.user_id == user_id)
+            .values({
+                "sol_balance_lamports": ReferralStats.__table__.c["sol_balance_lamports"] + commission_amount_lamports,
+                "last_updated_at": datetime.utcnow()
+            })
+        )
+        
+        logger.info(
+            "Added SOL commission to user balance",
+            user_id=user_id,
+            amount_lamports=commission_amount_lamports,
+            amount_sol=commission_amount_lamports / 1_000_000_000
+        )
+    
+    async def get_sol_balance(self, user_id: str) -> Dict[str, Any]:
+        """Get user's SOL balance information."""
+        stats = await self.get_user_referral_stats(user_id)
+        
+        if not stats:
+            return {
+                "balance_lamports": 0,
+                "balance_sol": 0.0,
+                "total_withdrawn_lamports": 0,
+                "total_withdrawn_sol": 0.0,
+                "last_withdrawal_at": None,
+                "available_for_withdrawal": True
+            }
+        
+        return {
+            "balance_lamports": stats.sol_balance_lamports,
+            "balance_sol": stats.sol_balance_lamports / 1_000_000_000,
+            "total_withdrawn_lamports": stats.total_sol_withdrawn,
+            "total_withdrawn_sol": stats.total_sol_withdrawn / 1_000_000_000,
+            "last_withdrawal_at": stats.last_withdrawal_at,
+            "available_for_withdrawal": stats.sol_balance_lamports > 0
+        }
+    
+    async def request_sol_withdrawal(
+        self,
+        user_id: str,
+        amount_lamports: int
+    ) -> "ReferralWithdrawal":
+        """Request SOL withdrawal from internal balance."""
+        from app.models.referral import ReferralWithdrawal
+        
+        # Check user's balance
+        stats = await self.get_user_referral_stats(user_id)
+        if not stats or stats.sol_balance_lamports < amount_lamports:
+            raise ValidationError(f"Insufficient SOL balance for withdrawal")
+        
+        # Create withdrawal request
+        withdrawal = ReferralWithdrawal(
+            user_id=user_id,
+            amount_lamports=amount_lamports,
+            status="pending"
+        )
+        
+        self.db.add(withdrawal)
+        await self.db.flush()
+        
+        # Deduct from balance immediately (reserved for withdrawal)
+        await self.db.execute(
+            update(ReferralStats)
+            .where(ReferralStats.user_id == user_id)
+            .values({
+                "sol_balance_lamports": ReferralStats.__table__.c["sol_balance_lamports"] - amount_lamports,
+                "last_updated_at": datetime.utcnow()
+            })
+        )
+        
+        logger.info(
+            "SOL withdrawal requested",
+            user_id=user_id,
+            withdrawal_id=withdrawal.id,
+            amount_lamports=amount_lamports,
+            amount_sol=amount_lamports / 1_000_000_000
+        )
+        
+        return withdrawal
+    
+    async def complete_sol_withdrawal(
+        self,
+        withdrawal_id: int,
+        transaction_signature: str
+    ) -> "ReferralWithdrawal":
+        """Complete SOL withdrawal with transaction signature."""
+        from app.models.referral import ReferralWithdrawal
+        
+        result = await self.db.execute(
+            select(ReferralWithdrawal).where(ReferralWithdrawal.id == withdrawal_id)
+        )
+        withdrawal = result.scalar_one_or_none()
+        
+        if not withdrawal:
+            raise NotFoundError(f"Withdrawal {withdrawal_id} not found")
+        
+        if withdrawal.status != "pending":
+            raise ValidationError(f"Withdrawal {withdrawal_id} is not pending")
+        
+        # Update withdrawal status
+        withdrawal.status = "completed"
+        withdrawal.transaction_signature = transaction_signature
+        withdrawal.processed_at = datetime.utcnow()
+        
+        # Update user's total withdrawn amount
+        await self.db.execute(
+            update(ReferralStats)
+            .where(ReferralStats.user_id == withdrawal.user_id)
+            .values({
+                "total_sol_withdrawn": ReferralStats.__table__.c["total_sol_withdrawn"] + withdrawal.amount_lamports,
+                "last_withdrawal_at": datetime.utcnow(),
+                "last_updated_at": datetime.utcnow()
+            })
+        )
+        
+        logger.info(
+            "SOL withdrawal completed",
+            withdrawal_id=withdrawal_id,
+            user_id=withdrawal.user_id,
+            amount_sol=withdrawal.amount_sol,
+            transaction=transaction_signature
+        )
+        
+        return withdrawal
+    
+    async def fail_sol_withdrawal(
+        self,
+        withdrawal_id: int,
+        error_message: str
+    ) -> "ReferralWithdrawal":
+        """Mark SOL withdrawal as failed and restore balance."""
+        from app.models.referral import ReferralWithdrawal
+        
+        result = await self.db.execute(
+            select(ReferralWithdrawal).where(ReferralWithdrawal.id == withdrawal_id)
+        )
+        withdrawal = result.scalar_one_or_none()
+        
+        if not withdrawal:
+            raise NotFoundError(f"Withdrawal {withdrawal_id} not found")
+        
+        if withdrawal.status != "pending":
+            raise ValidationError(f"Withdrawal {withdrawal_id} is not pending")
+        
+        # Update withdrawal status
+        withdrawal.status = "failed"
+        withdrawal.error_message = error_message
+        withdrawal.processed_at = datetime.utcnow()
+        
+        # Restore balance
+        await self.db.execute(
+            update(ReferralStats)
+            .where(ReferralStats.user_id == withdrawal.user_id)
+            .values({
+                "sol_balance_lamports": ReferralStats.__table__.c["sol_balance_lamports"] + withdrawal.amount_lamports,
+                "last_updated_at": datetime.utcnow()
+            })
+        )
+        
+        logger.error(
+            "SOL withdrawal failed",
+            withdrawal_id=withdrawal_id,
+            user_id=withdrawal.user_id,
+            amount_sol=withdrawal.amount_sol,
+            error=error_message
+        )
+        
+        return withdrawal
+    
+    async def get_withdrawal_history(
+        self,
+        user_id: str,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List["ReferralWithdrawal"]:
+        """Get user's withdrawal history."""
+        from app.models.referral import ReferralWithdrawal
+        
+        result = await self.db.execute(
+            select(ReferralWithdrawal)
+            .where(ReferralWithdrawal.user_id == user_id)
+            .order_by(desc(ReferralWithdrawal.requested_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        return result.scalars().all()
+    
+    async def get_pending_withdrawals(
+        self,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List["ReferralWithdrawal"]:
+        """Get all pending withdrawals for admin processing."""
+        from app.models.referral import ReferralWithdrawal
+        
+        result = await self.db.execute(
+            select(ReferralWithdrawal)
+            .where(ReferralWithdrawal.status == "pending")
+            .order_by(ReferralWithdrawal.requested_at)
+            .limit(limit)
+            .offset(offset)
+        )
+        return result.scalars().all()

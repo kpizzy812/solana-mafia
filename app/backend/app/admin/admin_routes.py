@@ -596,3 +596,165 @@ async def admin_health_check(
                 "message": "Admin API is healthy (authentication required for admin features)"
             }
         )
+
+
+# ===== DYNAMIC PRICING MANAGEMENT =====
+
+@admin_router.get(
+    "/pricing/status",
+    response_model=SuccessResponse,
+    summary="Dynamic Pricing Status",
+    description="Get current entry fee and pricing status"
+)
+async def get_pricing_status(
+    auth: dict = Depends(require_admin_auth),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get current pricing status and SOL rate."""
+    try:
+        from app.services.coingecko_service import coingecko_service
+        from app.services.dynamic_pricing_service import dynamic_pricing_service
+        
+        # Get SOL price
+        sol_price = await coingecko_service.get_sol_price_usd()
+        
+        # Get total players
+        total_players = await dynamic_pricing_service.get_total_players()
+        
+        # Calculate what dynamic fee should be
+        dynamic_fee_usd = dynamic_pricing_service.calculate_entry_fee_usd(total_players)
+        dynamic_fee_lamports = None
+        if sol_price:
+            dynamic_fee_lamports = dynamic_pricing_service.calculate_entry_fee_lamports(total_players, sol_price)
+        
+        return create_success_response(
+            data={
+                "sol_price_usd": sol_price,
+                "total_players": total_players,
+                "dynamic_fee_usd": dynamic_fee_usd,
+                "dynamic_fee_lamports": dynamic_fee_lamports,
+                "dynamic_fee_sol": dynamic_fee_lamports / 1_000_000_000 if dynamic_fee_lamports else None,
+                "current_fee_lamports": dynamic_pricing_service.last_entry_fee,
+                "pricing_enabled": settings.dynamic_pricing_enabled,
+                "admin_wallet_configured": bool(dynamic_pricing_service.admin_keypair),
+                "update_interval": settings.price_update_interval
+            },
+            message="Pricing status retrieved successfully"
+        )
+        
+    except Exception as e:
+        logger.error("Error getting pricing status", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve pricing status"
+        )
+
+
+@admin_router.post(
+    "/pricing/update",
+    response_model=SuccessResponse,
+    summary="Manual Entry Fee Update",
+    description="Manually update entry fee (for promotions and campaigns)"
+)
+async def manual_update_entry_fee(
+    fee_data: Dict[str, Any],
+    auth: dict = Depends(require_admin_auth)
+):
+    """Manually update entry fee."""
+    try:
+        from app.services.dynamic_pricing_service import dynamic_pricing_service
+        
+        # Validate input
+        if "fee_lamports" not in fee_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="fee_lamports is required"
+            )
+        
+        fee_lamports = int(fee_data["fee_lamports"])
+        if fee_lamports <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="fee_lamports must be positive"
+            )
+        
+        # Send transaction
+        success = await dynamic_pricing_service._send_update_transaction(fee_lamports)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send update transaction"
+            )
+        
+        # Update cache
+        dynamic_pricing_service.last_entry_fee = fee_lamports
+        
+        logger.info(
+            "Admin manually updated entry fee",
+            admin_wallet=auth.get("wallet"),
+            new_fee_lamports=fee_lamports,
+            new_fee_sol=fee_lamports / 1_000_000_000
+        )
+        
+        return create_success_response(
+            data={
+                "new_fee_lamports": fee_lamports,
+                "new_fee_sol": fee_lamports / 1_000_000_000,
+                "updated_by": auth.get("wallet", "admin"),
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            message=f"Entry fee updated to {fee_lamports} lamports"
+        )
+        
+    except Exception as e:
+        logger.error("Error updating entry fee", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update entry fee"
+        )
+
+
+@admin_router.post(
+    "/pricing/sync",
+    response_model=SuccessResponse,
+    summary="Sync Entry Fee to Dynamic Price",
+    description="Force sync entry fee to current dynamic price calculation"
+)
+async def sync_dynamic_price(
+    auth: dict = Depends(require_admin_auth)
+):
+    """Force sync entry fee to dynamic calculation."""
+    try:
+        from app.services.dynamic_pricing_service import dynamic_pricing_service
+        
+        # Force update
+        success = await dynamic_pricing_service.update_entry_fee_if_needed()
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to sync dynamic price"
+            )
+        
+        logger.info(
+            "Admin synced entry fee to dynamic price",
+            admin_wallet=auth.get("wallet")
+        )
+        
+        return create_success_response(
+            data={
+                "new_fee_lamports": dynamic_pricing_service.last_entry_fee,
+                "new_fee_sol": dynamic_pricing_service.last_entry_fee / 1_000_000_000 if dynamic_pricing_service.last_entry_fee else None,
+                "synced_by": auth.get("wallet", "admin"),
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            message="Entry fee synced to dynamic price"
+        )
+        
+    except Exception as e:
+        logger.error("Error syncing dynamic price", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to sync dynamic price"
+        )

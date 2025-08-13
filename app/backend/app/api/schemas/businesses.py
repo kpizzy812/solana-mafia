@@ -11,7 +11,6 @@ from uuid import UUID
 from .common import (
     APIResponse,
     WalletField,
-    NFTMintField,
     BusinessNameField,
     LamportsField,
     BusinessType,
@@ -30,7 +29,7 @@ class BusinessBase(BaseModel):
     owner: str = WalletField
     business_type: BusinessType
     name: str = BusinessNameField
-    level: int = Field(ge=1, le=10, description="Business level")
+    level: int = Field(ge=0, le=10, description="Business level (0-3, matches contract upgrade_level)")
 
 
 class BusinessCreate(BaseModel):
@@ -56,7 +55,7 @@ class BusinessResponse(BusinessBase):
     slot_index: int = Field(ge=0, le=29)
     cost: int = LamportsField
     earnings_per_hour: int = LamportsField
-    nft_mint: str = NFTMintField
+    # Убрано nft_mint поле - NFT больше не используются
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -89,13 +88,13 @@ class BusinessMarketplace(BaseModel):
     seller: str = WalletField
     business_type: BusinessType
     name: str
-    level: int = Field(ge=1, le=10)
+    level: int = Field(ge=0, le=10)
     earnings_per_hour: int = LamportsField
     asking_price: int = LamportsField
     days_held: int = Field(ge=0)
     penalty_percentage: float = Field(ge=0.0, le=1.0)
     net_sale_price: int = LamportsField
-    nft_mint: str = NFTMintField
+    # Убрано nft_mint поле - NFT больше не используются
     listed_at: datetime
 
 
@@ -114,7 +113,7 @@ class BusinessStats(BaseModel):
     business_type: BusinessType
     total_created: int = Field(ge=0)
     total_active: int = Field(ge=0)
-    average_level: float = Field(ge=1.0, le=10.0)
+    average_level: float = Field(ge=0.0, le=10.0)
     total_earnings_generated: int = LamportsField
     average_price: int = LamportsField
     most_expensive_sale: int = LamportsField
@@ -155,7 +154,7 @@ class BusinessHistory(BaseModel):
 class BusinessEarningsProjection(BaseModel):
     """Business earnings projection."""
     business_id: str
-    current_level: int = Field(ge=1, le=10)
+    current_level: int = Field(ge=0, le=10)
     current_earnings_per_hour: int = LamportsField
     projections: List[dict] = Field(
         description="Earnings projections for different time periods",
@@ -171,8 +170,8 @@ class BusinessEarningsProjection(BaseModel):
 class BusinessUpgradeInfo(BaseModel):
     """Business upgrade information."""
     business_id: str
-    current_level: int = Field(ge=1, le=9)
-    next_level: int = Field(ge=2, le=10)
+    current_level: int = Field(ge=0, le=9)
+    next_level: int = Field(ge=1, le=10)
     upgrade_cost: int = LamportsField
     current_earnings_per_hour: int = LamportsField
     upgraded_earnings_per_hour: int = LamportsField

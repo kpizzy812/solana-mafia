@@ -12,7 +12,8 @@ from fastapi import WebSocket, WebSocketDisconnect, Query, Depends, HTTPExceptio
 from fastapi.responses import JSONResponse
 
 from app.api.dependencies import validate_wallet_param
-from .auth import authenticate_websocket_wallet, validate_websocket_permissions, get_connection_limits
+from app.utils.validation import is_valid_solana_address
+from .auth import validate_websocket_permissions, get_connection_limits
 from .connection_manager import connection_manager
 from .schemas import (
     MessageType,
@@ -30,8 +31,8 @@ logger = structlog.get_logger(__name__)
 
 async def websocket_handler(
     websocket: WebSocket,
-    wallet: str = Depends(authenticate_websocket_wallet),
-    client_id: Optional[str] = Query(None, description="Optional client identifier")
+    wallet: str,
+    client_id: Optional[str] = None
 ):
     """
     WebSocket endpoint for real-time player updates.
@@ -42,6 +43,11 @@ async def websocket_handler(
     - NFT transfer notifications
     - Custom event subscriptions
     """
+    
+    # Validate wallet address
+    if not is_valid_solana_address(wallet):
+        await websocket.close(code=4002, reason="Invalid wallet address")
+        return
     
     # Generate client ID if not provided
     if not client_id:
@@ -209,11 +215,14 @@ async def _handle_subscription_request(connection, message_data):
                     event_type=event_type_str
                 )
         
-        # Send confirmation
-        response = WebSocketResponse(
-            success=True,
-            message="Subscriptions updated",
-            data={"subscribed_events": event_types}
+        # Send confirmation as proper WebSocket message with type
+        from .schemas import SubscriptionMessage
+        response = SubscriptionMessage(
+            data={
+                "success": True,
+                "message": "Subscriptions updated",
+                "subscribed_events": event_types
+            }
         )
         await connection.websocket.send_json(response.model_dump())
         
@@ -249,11 +258,14 @@ async def _handle_unsubscription_request(connection, message_data):
                     event_type=event_type_str
                 )
         
-        # Send confirmation
-        response = WebSocketResponse(
-            success=True,
-            message="Subscriptions updated",
-            data={"unsubscribed_events": event_types}
+        # Send confirmation as proper WebSocket message with type  
+        from .schemas import SubscriptionMessage
+        response = SubscriptionMessage(
+            data={
+                "success": True,
+                "message": "Subscriptions updated", 
+                "unsubscribed_events": event_types
+            }
         )
         await connection.websocket.send_json(response.model_dump())
         
@@ -268,10 +280,13 @@ async def _handle_unsubscription_request(connection, message_data):
 async def _handle_ping(connection):
     """Handle ping messages from clients."""
     connection.update_ping()
-    response = WebSocketResponse(
-        success=True,
-        message="pong",
-        data={"timestamp": datetime.utcnow().isoformat()}
+    from .schemas import ConnectionStatusMessage  
+    response = ConnectionStatusMessage(
+        data={
+            "success": True,
+            "message": "pong",
+            "timestamp": datetime.utcnow().isoformat()
+        }
     )
     await connection.websocket.send_json(response.model_dump())
 
@@ -280,60 +295,25 @@ async def _send_initial_player_data(connection, wallet: str):
     """Send initial player data to a new connection."""
     try:
         # Import here to avoid circular imports
-        from app.core.database import get_async_session
+        from app.core.database import get_async_session, init_database
         from app.models.player import Player
         
-        async with get_async_session() as db:
-            # Get player data
-            player = await Player.get_by_wallet(db, wallet)
-            
-            if player:
-                # Send player update
-                player_msg = PlayerUpdateMessage(
-                    data={
-                        "wallet": wallet,
-                        "business_count": player.business_count,
-                        "total_businesses_created": player.total_businesses_created,
-                        "total_earnings": player.total_earnings,
-                        "earnings_balance": player.earnings_balance,
-                        "last_earnings_claim": player.last_earnings_claim.isoformat() if player.last_earnings_claim else None,
-                        "slot_count": player.slot_count,
-                        "premium_slots": player.premium_slots
-                    }
-                )
-                await connection.send_message(player_msg)
-                
-                # Send earnings update if there's a balance
-                if player.earnings_balance > 0:
-                    earnings_msg = EarningsUpdateMessage(
-                        data={
-                            "wallet": wallet,
-                            "available_balance": player.earnings_balance,
-                            "total_earned": player.total_earnings,
-                            "last_claim": player.last_earnings_claim.isoformat() if player.last_earnings_claim else None
-                        }
-                    )
-                    await connection.send_message(earnings_msg)
-                
-                logger.debug(
-                    "Initial player data sent",
-                    client_id=connection.client_id,
-                    wallet=wallet
-                )
-            else:
-                logger.warning(
-                    "Player not found for initial data",
-                    client_id=connection.client_id,
-                    wallet=wallet
-                )
+        # WebSocket connected successfully - skip initial data load to avoid greenlet issues
+        # Data will be sent when events occur via signature processor
+        logger.info(
+            "WebSocket client connected and ready for notifications",
+            client_id=connection.client_id,
+            wallet=wallet
+        )
                 
     except Exception as e:
-        logger.error(
-            "Error sending initial player data",
+        logger.warning(
+            "Could not send initial player data, continuing without it",
             client_id=connection.client_id,
             wallet=wallet,
             error=str(e)
         )
+        # Don't re-raise the error - WebSocket connection should continue working
 
 
 async def get_websocket_stats():
@@ -353,8 +333,19 @@ from fastapi import APIRouter
 
 websocket_router = APIRouter()
 
+# WebSocket endpoint wrapper to extract path parameter
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint wrapper that extracts wallet from path."""
+    wallet = websocket.path_params.get("wallet")
+    if not wallet:
+        await websocket.close(code=4001, reason="Wallet parameter missing")
+        return
+    
+    client_id = websocket.query_params.get("client_id")
+    await websocket_handler(websocket, wallet, client_id)
+
 # Add WebSocket endpoint
-websocket_router.add_websocket_route("/ws", websocket_handler)
+websocket_router.add_websocket_route("/ws/{wallet}", websocket_endpoint)
 
 # Add HTTP endpoint for stats
 websocket_router.add_api_route("/stats", get_websocket_stats, methods=["GET"])

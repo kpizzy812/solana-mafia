@@ -215,8 +215,55 @@ class EventDataValidator:
         if "cost" in data and not GameDataValidator.validate_lamports_amount(data["cost"]):
             errors.append("Invalid cost amount")
             
-        if "earnings_per_hour" in data and not GameDataValidator.validate_earnings_amount(data["earnings_per_hour"]):
-            errors.append("Invalid earnings per hour")
+        if "earnings_per_hour" in data:
+            earnings_value = data["earnings_per_hour"]
+            is_valid = GameDataValidator.validate_earnings_amount(earnings_value)
+            if not is_valid:
+                errors.append(f"Invalid earnings per hour: {earnings_value} (min: {GameDataValidator.MIN_EARNINGS_PER_HOUR}, max: {GameDataValidator.MAX_EARNINGS_PER_HOUR})")
+            
+        if "name" in data and not GameDataValidator.validate_business_name(data["name"]):
+            errors.append("Invalid business name")
+            
+        return errors
+        
+    @staticmethod
+    def validate_business_created_in_slot_event(data: Dict[str, Any]) -> List[str]:
+        """
+        Validate BusinessCreatedInSlot event data (no NFT required).
+        
+        Returns:
+            List of validation errors (empty if valid)
+        """
+        errors = []
+        
+        # Required fields (no nft_mint required for slot-based events)
+        required_fields = [
+            "business_id", "owner", "business_type", "name", 
+            "slot_index", "cost", "earnings_per_hour"
+        ]
+        
+        for field in required_fields:
+            if field not in data:
+                errors.append(f"Missing {field} field")
+                
+        # Validate specific fields if present
+        if "owner" in data and not SolanaValidator.is_valid_pubkey(data["owner"]):
+            errors.append("Invalid owner address")
+            
+        if "business_type" in data and not GameDataValidator.validate_business_type(data["business_type"]):
+            errors.append("Invalid business type")
+            
+        if "slot_index" in data and not GameDataValidator.validate_slot_index(data["slot_index"]):
+            errors.append("Invalid slot index")
+            
+        if "cost" in data and not GameDataValidator.validate_lamports_amount(data["cost"]):
+            errors.append("Invalid cost amount")
+            
+        if "earnings_per_hour" in data:
+            earnings_value = data["earnings_per_hour"]
+            is_valid = GameDataValidator.validate_earnings_amount(earnings_value)
+            if not is_valid:
+                errors.append(f"Invalid earnings per hour: {earnings_value} (min: {GameDataValidator.MIN_EARNINGS_PER_HOUR}, max: {GameDataValidator.MAX_EARNINGS_PER_HOUR})")
             
         if "name" in data and not GameDataValidator.validate_business_name(data["name"]):
             errors.append("Invalid business name")
@@ -318,14 +365,15 @@ class EventDataValidator:
         """
         errors = []
         
-        # Common validation
-        if "wallet" not in data:
-            errors.append("Missing wallet field")
-        elif not SolanaValidator.is_valid_pubkey(data["wallet"]):
-            errors.append("Invalid wallet address")
+        # Common validation - 🔧 FIXED: contract uses "player" not "wallet"
+        if "player" not in data:
+            errors.append("Missing player field")
+        elif not SolanaValidator.is_valid_pubkey(data["player"]):
+            errors.append("Invalid player address")
             
         if event_type == "updated":
-            required_fields = ["earnings_amount", "total_earnings"]
+            # 🔧 FIXED: Updated to match contract field names
+            required_fields = ["earnings_added", "total_pending"]
             for field in required_fields:
                 if field not in data:
                     errors.append(f"Missing {field} field")
@@ -393,10 +441,15 @@ def validate_event_data(event_type: str, data: Dict[str, Any]) -> List[str]:
     validators = {
         "PlayerCreated": EventDataValidator.validate_player_created_event,
         "BusinessCreated": EventDataValidator.validate_business_created_event,
+        "BusinessCreatedInSlot": EventDataValidator.validate_business_created_in_slot_event,  # Slot-based validation without NFT
         "BusinessUpgraded": EventDataValidator.validate_business_upgraded_event,
+        "BusinessUpgradedInSlot": EventDataValidator.validate_business_upgraded_event,  # Same validation as BusinessUpgraded
         "BusinessSold": EventDataValidator.validate_business_sold_event,
+        "BusinessSoldFromSlot": EventDataValidator.validate_business_sold_event,  # Same validation as BusinessSold
         "EarningsUpdated": lambda d: EventDataValidator.validate_earnings_event(d, "updated"),
         "EarningsClaimed": lambda d: EventDataValidator.validate_earnings_event(d, "claimed"),
+        "SlotUnlocked": lambda d: True,  # Simple validation for slot events
+        "PremiumSlotPurchased": lambda d: True,  # Simple validation for slot events
     }
     
     validator = validators.get(event_type)

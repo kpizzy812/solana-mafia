@@ -16,8 +16,8 @@ from app.core.config import settings
 from app.core.exceptions import ValidationError, NotFoundError, AuthenticationError
 from app.models.player import Player
 from app.models.business import Business
-from app.models.nft import BusinessNFT
-from app.utils.validation import validate_wallet_address, validate_nft_mint
+# Убрано BusinessNFT - NFT больше не используются
+from app.utils.validation import validate_wallet_address
 from app.api.schemas.common import PaginationParams, SortParams
 from app.auth.tma_auth import AuthType, TMAInitData
 
@@ -67,20 +67,7 @@ async def validate_business_id_param(
     return business_id
 
 
-async def validate_nft_mint_param(
-    nft_mint: str = Path(..., description="NFT mint address")
-) -> str:
-    """Validate NFT mint address path parameter."""
-    if not validate_nft_mint(nft_mint):
-        logger.warning("Invalid NFT mint address provided", nft_mint=nft_mint)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "INVALID_NFT_MINT",
-                "message": "Invalid NFT mint address format"
-            }
-        )
-    return nft_mint
+# Убрано validate_nft_mint_param - NFT больше не используются
 
 
 async def get_pagination_params(
@@ -136,6 +123,35 @@ async def get_player_by_wallet(
         )
 
 
+async def get_player_by_wallet_optional(
+    wallet: str = Depends(validate_wallet_param),
+    db: AsyncSession = Depends(get_database)
+) -> Optional[Player]:
+    """Get player by wallet address, return None if not found."""
+    try:
+        result = await db.execute(
+            select(Player).where(Player.wallet == wallet)
+        )
+        player = result.scalar_one_or_none()
+        
+        if player:
+            logger.debug("Player found", wallet=wallet, player_id=player.wallet)
+        else:
+            logger.info("Player not found", wallet=wallet)
+        
+        return player
+        
+    except Exception as e:
+        logger.error("Error fetching player", wallet=wallet, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "DATABASE_ERROR",
+                "message": "Failed to fetch player data"
+            }
+        )
+
+
 async def get_business_by_id(
     business_id: str = Depends(validate_business_id_param),
     db: AsyncSession = Depends(get_database)
@@ -173,41 +189,7 @@ async def get_business_by_id(
         )
 
 
-async def get_nft_by_mint(
-    nft_mint: str = Depends(validate_nft_mint_param),
-    db: AsyncSession = Depends(get_database)
-) -> BusinessNFT:
-    """Get NFT by mint address."""
-    try:
-        result = await db.execute(
-            select(BusinessNFT).where(BusinessNFT.mint == nft_mint)
-        )
-        nft = result.scalar_one_or_none()
-        
-        if not nft:
-            logger.info("NFT not found", nft_mint=nft_mint)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "error": "NFT_NOT_FOUND",
-                    "message": f"NFT with mint {nft_mint} not found"
-                }
-            )
-        
-        logger.debug("NFT found", nft_mint=nft_mint)
-        return nft
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Error fetching NFT", nft_mint=nft_mint, error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": "DATABASE_ERROR",
-                "message": "Failed to fetch NFT data"
-            }
-        )
+# Убрано get_nft_by_mint - NFT больше не используются
 
 
 async def verify_business_ownership(
@@ -233,27 +215,7 @@ async def verify_business_ownership(
     return business
 
 
-async def verify_nft_ownership(
-    nft: BusinessNFT = Depends(get_nft_by_mint),
-    player: Player = Depends(get_player_by_wallet),
-) -> BusinessNFT:
-    """Verify that the player owns the NFT."""
-    if nft.owner != player.wallet:
-        logger.warning(
-            "NFT ownership verification failed",
-            nft_mint=nft.mint,
-            nft_owner=nft.owner,
-            requesting_wallet=player.wallet
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "NFT_NOT_OWNED",
-                "message": "You do not own this NFT"
-            }
-        )
-    
-    return nft
+# Убрано verify_nft_ownership - NFT больше не используются
 
 
 async def get_optional_wallet_auth(

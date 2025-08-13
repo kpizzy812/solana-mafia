@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import init_database, close_database, get_async_session
 from app.models.player import Player
 from app.models.business import Business, BusinessType, BusinessSlot, SlotType
-from app.models.nft import BusinessNFT
+# from app.models.nft import BusinessNFT  # NFT functionality removed
 from app.models.event import Event, EventType, EventStatus
 from app.models.earnings import EarningsSchedule, EarningsHistory, EarningsStatus
 

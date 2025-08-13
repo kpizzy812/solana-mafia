@@ -1,0 +1,242 @@
+/**
+ * API client for Solana Mafia backend
+ */
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_VERSION = '/api/v1';
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+}
+
+export interface PaginatedResponse<T> extends ApiResponse<T> {
+  total?: number;
+  offset?: number;
+  limit?: number;
+}
+
+export interface PlayerStats {
+  wallet: string;
+  total_businesses: number;
+  active_businesses: number;
+  total_earnings: number;
+  earnings_balance: number;
+  total_claimed: number;
+  business_types_owned: string[];
+  slot_utilization: number;
+  days_active: number;
+  last_activity?: string;
+}
+
+export interface PlayerProfile {
+  wallet: string;
+  created_at: string;
+  updated_at: string;
+  total_earnings: number;
+  earnings_balance: number;
+  slots_unlocked: number;
+  is_premium: boolean;
+  earnings_schedule_minute: number;
+  referrer?: string;
+  referral_count: number;
+  last_earnings_update?: string;
+  last_claim?: string;
+}
+
+export interface BusinessSummary {
+  business_id: string;
+  business_type: string;
+  name: string;
+  level: number;
+  earnings_per_hour: number;
+  slot_index: number;
+  is_active: boolean;
+  nft_mint: string;
+  created_at: string;
+}
+
+export interface PlayerBusinesses {
+  wallet: string;
+  businesses: BusinessSummary[];
+  total_businesses: number;
+  active_businesses: number;
+  total_hourly_earnings: number;
+}
+
+class ApiClient {
+  private baseUrl: string;
+  private headers: HeadersInit;
+
+  constructor() {
+    this.baseUrl = `${API_BASE_URL}${API_VERSION}`;
+    this.headers = {
+      'Content-Type': 'application/json',
+    };
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<ApiResponse<T>> {
+    try {
+      const url = `${this.baseUrl}${endpoint}`;
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...this.headers,
+          ...options.headers,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Handle specific error cases
+        if (response.status === 404 && errorData.detail?.error === 'PLAYER_NOT_FOUND') {
+          return {
+            success: false,
+            error: 'PLAYER_NOT_FOUND',
+            message: errorData.detail?.message || 'Player not found',
+          };
+        }
+        
+        throw new Error(errorData.detail?.message || errorData.message || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`API request failed for ${endpoint}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  // Health check
+  async healthCheck(): Promise<ApiResponse<{ status: string; services: Record<string, string> }>> {
+    return this.request('/health');
+  }
+
+  // Player endpoints
+  async getPlayerProfile(wallet: string): Promise<ApiResponse<PlayerProfile>> {
+    return this.request(`/players/${wallet}`);
+  }
+
+  async getPlayerStats(wallet: string): Promise<ApiResponse<PlayerStats>> {
+    return this.request(`/players/${wallet}/stats`);
+  }
+
+  async getPlayerBusinesses(
+    wallet: string,
+    activeOnly: boolean = false,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<ApiResponse<PlayerBusinesses>> {
+    const params = new URLSearchParams({
+      active_only: activeOnly.toString(),
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+    
+    return this.request(`/players/${wallet}/businesses?${params}`);
+  }
+
+  // Global stats endpoints
+  async getGlobalStats(): Promise<ApiResponse<any>> {
+    return this.request(`/stats/global`);
+  }
+
+  async getLeaderboard(): Promise<ApiResponse<any>> {
+    return this.request(`/stats/leaderboard`);
+  }
+
+  // Business endpoints
+  async listBusinesses(): Promise<ApiResponse<any>> {
+    return this.request(`/businesses/`);
+  }
+
+  async getBusinessDetails(businessId: string): Promise<ApiResponse<any>> {
+    return this.request(`/businesses/${businessId}`);
+  }
+
+  // Earnings endpoints
+  async getPlayerEarnings(wallet: string): Promise<ApiResponse<any>> {
+    return this.request(`/earnings/${wallet}`);
+  }
+
+  // Set authorization header for wallet-based auth
+  setWalletAuth(walletAddress: string) {
+    this.headers = {
+      ...this.headers,
+      Authorization: `Bearer ${walletAddress}`,
+    };
+  }
+
+  // Clear authorization
+  clearAuth() {
+    const { Authorization, ...rest } = this.headers as any;
+    this.headers = rest;
+  }
+}
+
+// Export singleton instance
+export const apiClient = new ApiClient();
+
+// Utility functions
+export const formatSOL = (amount: number): string => {
+  return `${amount.toFixed(3)} SOL`;
+};
+
+export const formatNumber = (num: number): string => {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toString();
+};
+
+export const calculateDailyYield = (earningsPerHour: number, businessPrice: number): number => {
+  if (businessPrice === 0) return 0;
+  const dailyEarnings = earningsPerHour * 24;
+  return (dailyEarnings / businessPrice) * 100;
+};
+
+// Convert lamports to SOL
+export const lamportsToSOL = (lamports: number): number => {
+  return lamports / 1_000_000_000;
+};
+
+// Format total earnings with appropriate units
+export const formatTotalEarnings = (amount: number): string => {
+  const solAmount = lamportsToSOL(amount);
+  if (solAmount < 0.001) return `${Math.round(amount)} lamports`;
+  return formatSOL(solAmount);
+};
+
+// Sync player data from blockchain
+export const syncPlayerFromBlockchain = async (walletAddress: string): Promise<ApiResponse<any>> => {
+  try {
+    const url = `${apiClient['baseUrl']}/players/${walletAddress}/sync`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: apiClient['headers'],
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail?.message || errorData.message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Sync from blockchain failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Sync failed',
+    };
+  }
+};

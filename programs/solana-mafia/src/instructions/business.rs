@@ -1,59 +1,136 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use anchor_spl::token::{self, Token};
 
 use crate::state::*;
 use crate::constants::*;
 use crate::error::SolanaMafiaError;
-use crate::create_business_nft;
-use crate::{CreateBusinessInSlot, UpgradeBusinessInSlot, SellBusinessFromSlot};
+// Импорты контекстов убраны - используем прямо через lib.rs
 
-/// 🏪 Create business in specific slot with NFT
+/// 🏪 Create business in specific slot (without NFT)
 pub fn create_business(
-    ctx: Context<CreateBusinessInSlot>,
+    ctx: Context<crate::CreateBusinessInSlot>,
     business_type: u8,
     deposit_amount: u64,
     slot_index: u8,
 ) -> Result<()> {
-    let game_config = &ctx.accounts.game_config;
-    let game_state = &mut ctx.accounts.game_state;
     let player = &mut ctx.accounts.player;
+    let game_state = &mut ctx.accounts.game_state;
+    let game_config = &ctx.accounts.game_config;
     let clock = Clock::get()?;
-    
-    // Validate business logic
-    if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
-        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
+
+    // 🔧 FIX: Инициализировать слоты если игрок новый (created_at == 0)
+    if player.created_at == 0 {
+        msg!("🆕 Initializing new player slots...");
+        
+        // 🚨 ENTRY FEE: Взимаем entry fee как в create_player
+        let current_total_players = game_state.total_players;
+        let entry_fee = game_config.get_current_entry_fee(current_total_players);
+        
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.treasury_wallet.to_account_info(),
+                },
+            ),
+            entry_fee,
+        )?;
+        
+        // 🚨 КРИТИЧЕСКИЙ FIX: Устанавливаем owner и bump
+        player.owner = ctx.accounts.owner.key();
+        player.bump = ctx.bumps.player;
+        
+        // 🏪 НОВОЕ: Инициализируем все 9 слотов разблокированными
+        let mut slots = [BusinessSlotCompact::new_basic_free(); 9];
+        
+        // Слоты 0-2: Basic бесплатные (уже оплачены)
+        for i in 0..3 {
+            slots[i] = BusinessSlotCompact::new_basic_free();
+        }
+        
+        // Слоты 3-5: Basic платные (10% при первом использовании)
+        for i in 3..6 {
+            slots[i] = BusinessSlotCompact::new_basic_paid();
+        }
+        
+        // Слоты 6-8: Premium/VIP/Legendary (неоплаченные)
+        slots[6] = BusinessSlotCompact::new_premium_unpaid(SlotType::Premium);
+        slots[7] = BusinessSlotCompact::new_premium_unpaid(SlotType::VIP);
+        slots[8] = BusinessSlotCompact::new_premium_unpaid(SlotType::Legendary);
+        
+        player.business_slots = slots;
+        player.unlocked_slots_count = 9; // Все 9 слотов разблокированы
+        player.premium_slots_count = 3; // 3 premium слота доступны
+        player.flags = 0;
+        player.created_at = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
+        player.next_earnings_time = PlayerCompact::timestamp_to_u32(clock.unix_timestamp + EARNINGS_INTERVAL);
+        player.earnings_interval = EARNINGS_INTERVAL as u32;
+        player.last_auto_update = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
+        
+        // Устанавливаем has_paid_entry как в create_player
+        player.set_has_paid_entry(true);
+        
+        // Обновляем game_state как в create_player
+        game_state.add_player();
+        game_state.total_treasury_collected = game_state.total_treasury_collected
+            .checked_add(entry_fee)
+            .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+        msg!("✅ New player initialized with 9 slots (3 free + 3 basic paid + 3 premium), entry fee: {} lamports", entry_fee);
     }
-    
-    if business_type as usize >= BUSINESS_TYPES_COUNT {
+
+    // Validate slot index
+    if slot_index >= MAX_REGULAR_SLOTS {
+        return Err(SolanaMafiaError::InvalidSlotIndex.into());
+    }
+
+    // Check if slot is available (все слоты разблокированы по умолчанию)
+    let slot = &player.business_slots[slot_index as usize];
+    if slot.business.is_some() {
+        return Err(SolanaMafiaError::SlotAlreadyOccupied.into());
+    }
+
+    // Validate business type
+    if (business_type as usize) >= BUSINESS_TYPES_COUNT {
         return Err(SolanaMafiaError::InvalidBusinessType.into());
     }
-    
-    let daily_rate = game_config.get_business_rate(business_type as usize);
-    let min_deposit = game_config.get_min_deposit(business_type as usize);
-    
+
+    let business_enum = BusinessType::from_index(business_type).unwrap();
+    let min_deposit = business_enum.get_base_cost();
+    let daily_rate = business_enum.get_base_rate();
+
+    // Validate deposit amount
     if deposit_amount < min_deposit {
         return Err(SolanaMafiaError::InsufficientDeposit.into());
     }
+
+    // 🏪 НОВОЕ: Проверяем стоимость слота заранее
+    let slot_cost = slot.get_slot_cost(deposit_amount);
+    let total_payment = deposit_amount
+        .checked_add(slot_cost)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
     
-    // Validate slot
-    if slot_index as usize >= player.business_slots.len() {
-        return Err(SolanaMafiaError::InvalidSlotIndex.into());
+    if slot_cost > 0 {
+        msg!("🏪 Slot cost required: {} lamports ({:.3} SOL)", slot_cost, slot_cost as f64 / 1_000_000_000.0);
     }
-    
-    let slot = &player.business_slots[slot_index as usize];
-    if !slot.is_unlocked {
-        return Err(SolanaMafiaError::SlotNotUnlocked.into());
-    }
-    
-    if slot.business.is_some() {
-        return Err(SolanaMafiaError::SlotOccupied.into());
-    }
-    
-    // Transfer funds
-    let treasury_fee = deposit_amount * game_config.treasury_fee_percent as u64 / 100;
-    let game_pool_amount = deposit_amount - treasury_fee;
-    
+
+    // Calculate fees: 20% to team wallet, 80% to treasury PDA (from business price only)
+    let team_fee = deposit_amount
+        .checked_mul(20) // 20% to team
+        .ok_or(SolanaMafiaError::MathOverflow)?
+        .checked_div(100)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    let treasury_amount = deposit_amount
+        .checked_sub(team_fee)
+        .ok_or(SolanaMafiaError::InsufficientDeposit)?; // 80% to treasury PDA
+        
+    // 🏪 Комиссия за слот идет полностью команде
+    let total_team_fee = team_fee.checked_add(slot_cost)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    // Transfer team fee + slot cost to team wallet via CPI
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -62,9 +139,10 @@ pub fn create_business(
                 to: ctx.accounts.treasury_wallet.to_account_info(),
             },
         ),
-        treasury_fee,
+        total_team_fee,
     )?;
-    
+
+    // Transfer treasury amount to treasury PDA via CPI
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -73,142 +151,93 @@ pub fn create_business(
                 to: ctx.accounts.treasury_pda.to_account_info(),
             },
         ),
-        game_pool_amount,
+        treasury_amount,
     )?;
 
-    // Create business and NFT
-    let business_enum = BusinessType::from_index(business_type).unwrap();
-    let serial_number = game_state.get_next_nft_serial();
+    // Create business (для слотов 3-5 включаем slot_cost в стоимость бизнеса)
+    let business_value = if slot_index >= 3 && slot_index <= 5 && slot_cost > 0 {
+        // Для базовых платных слотов включаем slot_cost в стоимость бизнеса
+        deposit_amount.checked_add(slot_cost)
+            .ok_or(SolanaMafiaError::MathOverflow)?
+    } else {
+        deposit_amount
+    };
     
-    // Create NFT with level 0 (basic)
-    create_business_nft(
-        &ctx.accounts.owner,
-        &ctx.accounts.nft_mint,
-        &ctx.accounts.nft_token_account,
-        &ctx.accounts.nft_metadata,
-        &ctx.accounts.token_program,
-        &ctx.accounts.associated_token_program,
-        &ctx.accounts.token_metadata_program,
-        &ctx.accounts.system_program,
-        &ctx.accounts.rent,
+    let business = Business::new(
         business_enum,
-        0, // Level 0 for new business
-        serial_number,
-    )?;
+        business_value, // Для слотов 3-5 включает slot_cost
+        clock.unix_timestamp,
+    );
 
-    // Create business
-    let mut business = Business::new(
-        business_enum,
-        deposit_amount,
-        clock.unix_timestamp,
-    );
-    business.set_nft_mint(ctx.accounts.nft_mint.key());
-    
-    // Create BusinessNFT record
-    let business_nft = &mut ctx.accounts.business_nft;
-    **business_nft = BusinessNFT::new(
-        ctx.accounts.owner.key(),
-        business_enum,
-        ctx.accounts.nft_mint.key(),
-        ctx.accounts.nft_token_account.key(),
-        deposit_amount,
-        daily_rate,
-        clock.unix_timestamp,
-        serial_number,
-        ctx.bumps.business_nft,
-    );
+    // 🏪 Используем новый метод для оплаты слота при необходимости
+    let actual_slot_cost = player.pay_slot_if_needed(slot_index as usize, deposit_amount)?;
     
     // Place business in slot
     player.place_business_in_slot(slot_index as usize, business)?;
-    
-    // Update game statistics
-    game_state.add_investment(deposit_amount);
-    game_state.add_treasury_collection(treasury_fee);
-    game_state.add_business();
-    game_state.add_nft_mint();
-    
-    // Set earnings schedule if this is first business
-    if player.get_active_businesses_count() == 1 {
-        let player_seed = ctx.accounts.owner.key().to_bytes()[0] as u64;
-        player.set_earnings_schedule(clock.unix_timestamp, player_seed)?;
-    }
 
-    emit!(crate::BusinessNFTMinted {
-        player: ctx.accounts.owner.key(),
-        business_type,
-        mint: ctx.accounts.nft_mint.key(),
-        serial_number,
-        invested_amount: deposit_amount,
-        daily_rate,
-        created_at: clock.unix_timestamp,
-    });
+    // 🚨 ИСПРАВЛЕНО: Учитываем полную стоимость бизнеса (с slot_cost для слотов 3-5)
+    player.total_invested = player.total_invested
+        .checked_add(business_value)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    // Update game state
+    game_state.add_investment(deposit_amount);
+    game_state.add_treasury_collection(team_fee); // Track team fees
+    game_state.add_business();
+
+    // Set earnings schedule if this is first business
+    if player.first_business_time == 0 {
+        player.first_business_time = Player::timestamp_to_u32(clock.unix_timestamp);
+    }
 
     emit!(crate::BusinessCreatedInSlot {
         player: ctx.accounts.owner.key(),
         slot_index,
         business_type,
-        base_cost: deposit_amount,
+        level: 0, // Базовая функция создает level 0
+        base_cost: business_value, // Полная стоимость бизнеса (включает slot_cost для слотов 3-5)
+        slot_cost: actual_slot_cost,
+        total_paid: total_payment,
         daily_rate,
-        nft_mint: ctx.accounts.nft_mint.key(),
         created_at: clock.unix_timestamp,
     });
 
-    msg!("🏪🖼️ Business created in slot {}! Type: {}, Investment: {} lamports, Serial: {}", 
-        slot_index, business_type, deposit_amount, serial_number);
     Ok(())
 }
 
-/// ⬆️ Upgrade business in slot (burns old NFT, creates new one)
+/// ⬆️ Upgrade business in slot (simplified without NFT)
 pub fn upgrade_business(
-    ctx: Context<UpgradeBusinessInSlot>,
+    ctx: Context<crate::UpgradeBusinessInSlot>,
     slot_index: u8,
 ) -> Result<()> {
     let player = &mut ctx.accounts.player;
-    let game_state = &mut ctx.accounts.game_state;
-    let game_config = &ctx.accounts.game_config;
-    let old_business_nft = &mut ctx.accounts.old_business_nft;
-    let new_business_nft = &mut ctx.accounts.new_business_nft;
+    let _game_state = &mut ctx.accounts.game_state;
+    let _game_config = &ctx.accounts.game_config;
     let clock = Clock::get()?;
-    
-    // Check treasury wallet
-    if ctx.accounts.treasury_wallet.key() != game_state.treasury_wallet {
-        return Err(SolanaMafiaError::UnauthorizedAdmin.into());
-    }
-    
-    // Get current business from slot
-    if slot_index as usize >= player.business_slots.len() {
+
+    // Validate slot
+    if slot_index >= MAX_REGULAR_SLOTS {
         return Err(SolanaMafiaError::InvalidSlotIndex.into());
     }
-    
-    // Extract business data to avoid borrowing conflicts
-    let current_business = player.business_slots[slot_index as usize].business
-        .as_ref()
-        .ok_or(SolanaMafiaError::BusinessNotFound)?
-        .clone();
-    
+
+    let slot = &mut player.business_slots[slot_index as usize];
+    let current_business = slot.business.as_mut()
+        .ok_or(SolanaMafiaError::BusinessNotFound)?;
+
     if !current_business.is_active {
-        return Err(SolanaMafiaError::CannotUpgradeInactive.into());
+        return Err(SolanaMafiaError::BusinessNotActive.into());
     }
-    
-    // Check upgrade level
-    if current_business.upgrade_level >= MAX_UPGRADE_LEVEL {
-        return Err(SolanaMafiaError::BusinessMaxLevel.into());
-    }
-    
-    // Verify NFT ownership
-    if old_business_nft.player != ctx.accounts.player_owner.key() {
-        return Err(SolanaMafiaError::BusinessNotOwned.into());
-    }
-    
+
+    // Check if can upgrade
     let next_level = current_business.upgrade_level + 1;
-    let base_cost = game_config.get_min_deposit(current_business.business_type.to_index());
-    
+    if next_level >= MAX_UPGRADE_LEVEL {
+        return Err(SolanaMafiaError::MaxLevelReached.into());
+    }
+
     // Calculate upgrade cost
-    let upgrade_cost_multiplier = UPGRADE_COST_MULTIPLIERS.get(next_level as usize - 1)
-        .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
-    let upgrade_cost = base_cost * (*upgrade_cost_multiplier as u64) / 100;
+    let upgrade_cost = current_business.get_upgrade_cost(next_level)?;
     
-    // Transfer upgrade cost to treasury
+    // Transfer upgrade cost to treasury via CPI
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -219,215 +248,306 @@ pub fn upgrade_business(
         ),
         upgrade_cost,
     )?;
-    
-    // Burn old NFT
-    let cpi_accounts = token::Burn {
-        mint: ctx.accounts.old_nft_mint.to_account_info(),
-        from: ctx.accounts.old_nft_token_account.to_account_info(),
-        authority: ctx.accounts.player_owner.to_account_info(),
-    };
-    let cpi_program = ctx.accounts.token_program.to_account_info();
-    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-    token::burn(cpi_ctx, 1)?;
-    
-    // Create new upgraded business
-    let yield_bonus = UPGRADE_YIELD_BONUSES.get(next_level as usize - 1)
-        .ok_or(SolanaMafiaError::InvalidUpgradeLevel)?;
-    
-    let new_daily_rate = current_business.daily_rate
-        .checked_add(*yield_bonus)
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-    
-    let new_invested_amount = current_business.total_invested_amount
+
+    // Upgrade business
+    current_business.upgrade_to_level(next_level, upgrade_cost)?;
+    let new_daily_rate = current_business.daily_rate;
+
+    // 🚨 ИСПРАВЛЕНО: Используем u64 напрямую без конвертации
+    player.total_upgrade_spent = player.total_upgrade_spent
         .checked_add(upgrade_cost)
         .ok_or(SolanaMafiaError::MathOverflow)?;
-    
-    let mut new_business = current_business.clone();
-    new_business.upgrade_level = next_level;
-    new_business.daily_rate = new_daily_rate;
-    new_business.total_invested_amount = new_invested_amount;
-    new_business.set_nft_mint(ctx.accounts.new_nft_mint.key());
-    
-    // Create new NFT with upgraded metadata  
-    create_business_nft(
-        &ctx.accounts.player_owner,
-        &ctx.accounts.new_nft_mint,
-        &ctx.accounts.new_nft_token_account,
-        &ctx.accounts.new_nft_metadata,
-        &ctx.accounts.token_program,
-        &ctx.accounts.associated_token_program,
-        &ctx.accounts.token_metadata_program,
-        &ctx.accounts.system_program,
-        &ctx.accounts.rent,
-        current_business.business_type,
-        next_level,
-        game_state.get_next_nft_serial(),
-    )?;
-    
-    // Update NFT record
-    **new_business_nft = BusinessNFT::new(
-        ctx.accounts.player_owner.key(),
-        current_business.business_type,
-        ctx.accounts.new_nft_mint.key(),
-        ctx.accounts.new_nft_token_account.key(),
-        new_invested_amount,
-        new_daily_rate,
-        clock.unix_timestamp,
-        game_state.get_next_nft_serial(),
-        ctx.bumps.new_business_nft,
-    );
-    new_business_nft.upgrade_level = next_level;
-    
-    // Mark old NFT as burned
-    old_business_nft.burn();
-    
-    // Update player's business in slot
-    player.upgrade_business_in_slot(slot_index as usize, upgrade_cost, new_business)?;
-    
-    // Update game statistics
-    game_state.total_treasury_collected = game_state.total_treasury_collected
-        .checked_add(upgrade_cost)
-        .ok_or(SolanaMafiaError::MathOverflow)?;
-    game_state.add_nft_mint();
-    game_state.add_nft_burn();
-    
-    // Emit events
-    emit!(crate::BusinessNFTBurned {
-        player: ctx.accounts.player_owner.key(),
-        mint: ctx.accounts.old_nft_mint.key(),
-        business_type: current_business.business_type.to_index() as u8,
-        serial_number: old_business_nft.serial_number,
-        burned_at: clock.unix_timestamp,
-    });
-    
-    emit!(crate::BusinessNFTMinted {
-        player: ctx.accounts.player_owner.key(),
-        business_type: current_business.business_type.to_index() as u8,
-        mint: ctx.accounts.new_nft_mint.key(),
-        serial_number: new_business_nft.serial_number,
-        invested_amount: new_invested_amount,
-        daily_rate: new_daily_rate,
-        created_at: clock.unix_timestamp,
-    });
-    
+
     emit!(crate::BusinessUpgradedInSlot {
         player: ctx.accounts.player_owner.key(),
         slot_index,
-        old_level: current_business.upgrade_level,
+        old_level: next_level - 1,
         new_level: next_level,
         upgrade_cost,
-        old_nft_mint: ctx.accounts.old_nft_mint.key(),
-        new_nft_mint: ctx.accounts.new_nft_mint.key(),
         new_daily_rate,
         upgraded_at: clock.unix_timestamp,
     });
-    
-    msg!("⬆️ Business upgraded from level {} to {} in slot {}", 
-         current_business.upgrade_level, next_level, slot_index);
-    
+
     Ok(())
 }
 
-/// 🔥 Sell business from slot (with early exit fees and NFT burn)
+/// 🔥 Sell business from slot (simplified without NFT burning)
 pub fn sell_business(
-    ctx: Context<SellBusinessFromSlot>,
+    ctx: Context<crate::SellBusinessFromSlot>,
     slot_index: u8,
 ) -> Result<()> {
     let player = &mut ctx.accounts.player;
     let game_state = &mut ctx.accounts.game_state;
-    let business_nft = &mut ctx.accounts.business_nft;
     let clock = Clock::get()?;
-    
-    // Verify NFT ownership
-    if business_nft.player != ctx.accounts.player_owner.key() {
-        return Err(SolanaMafiaError::BusinessNotOwned.into());
+
+    // Validate slot
+    if slot_index >= MAX_REGULAR_SLOTS {
+        return Err(SolanaMafiaError::InvalidSlotIndex.into());
     }
-    
-    // Get business from slot
-    let (business, sell_fee_discount) = player.sell_business_from_slot(slot_index as usize)?;
-    
+
+    let slot = &mut player.business_slots[slot_index as usize];
+    let business = slot.business.take()
+        .ok_or(SolanaMafiaError::BusinessNotFound)?;
+
+    // 🔧 CRITICAL FIX: Reset slot occupied flag after removing business
+    slot.set_has_business(false);
+
     if !business.is_active {
-        return Err(SolanaMafiaError::BusinessNotFound.into());
+        return Err(SolanaMafiaError::BusinessNotActive.into());
     }
-    
-    // Calculate days held
-    let days_held = business.days_since_created(clock.unix_timestamp);
-    
-    // Calculate base early sell fee
-    let base_sell_fee_percent: u8 = match days_held {
-        0..=7 => 25,
-        8..=14 => 20,
-        15..=21 => 15,
-        22..=28 => 10,
-        29..=30 => 5,
-        _ => 2, // After 30 days, only 2% base fee
-    };
-    
-    // Apply slot discount
-    let final_sell_fee_percent = if sell_fee_discount as u8 >= base_sell_fee_percent {
-        0
+
+    // Calculate how long business was held
+    let days_held = (clock.unix_timestamp - business.created_at) / 86400;
+    let days_held_capped = std::cmp::min(days_held as usize, EARLY_SELL_FEES.len() - 1);
+
+    // Calculate sell fee with slot discount
+    let base_fee_percent = if days_held_capped < EARLY_SELL_FEES.len() {
+        EARLY_SELL_FEES[days_held_capped]
     } else {
-        base_sell_fee_percent - (sell_fee_discount as u8)
+        FINAL_SELL_FEE_PERCENT
     };
-    
-    let sell_fee = business.total_invested_amount * final_sell_fee_percent as u64 / 100;
-    let return_amount = business.total_invested_amount - sell_fee;
-    
-    msg!("💰 Slot sell calculation: invested={}, base_fee={}%, discount={}%, final_fee={}%, return={}", 
-        business.total_invested_amount, base_sell_fee_percent, sell_fee_discount, final_sell_fee_percent, return_amount);
-    
-    // Check if treasury has enough funds
-    let treasury_balance = ctx.accounts.treasury_pda.to_account_info().lamports();
-    if treasury_balance < return_amount {
-        msg!("❌ Insufficient treasury balance: {} < {}", treasury_balance, return_amount);
-        return Err(ProgramError::InsufficientFunds.into());
-    }
-    
-    // Burn the NFT
-    let cpi_accounts = token::Burn {
-        mint: ctx.accounts.nft_mint.to_account_info(),
-        from: ctx.accounts.nft_token_account.to_account_info(),
-        authority: ctx.accounts.player_owner.to_account_info(),
-    };
-    let cpi_program = ctx.accounts.token_program.to_account_info();
-    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-    token::burn(cpi_ctx, 1)?;
-    
-    // Transfer return amount from treasury 
-    **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
-    **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
-    
-    // Mark NFT as burned
-    business_nft.burn();
-    
+
+    let slot_discount = slot.get_sell_fee_discount();
+    let final_fee_percent = base_fee_percent.saturating_sub(slot_discount);
+
+    // Calculate return amount
+    let total_invested = business.get_total_investment_for_refund();
+    let sell_fee = total_invested
+        .checked_mul(final_fee_percent as u64)
+        .ok_or(SolanaMafiaError::MathOverflow)?
+        .checked_div(100)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    let return_amount = total_invested
+        .checked_sub(sell_fee)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    // Return funds to player from treasury PDA via CPI
+    ctx.accounts.treasury_pda.sub_lamports(return_amount)?;
+    ctx.accounts.player_owner.add_lamports(return_amount)?;
+
     // Update statistics
     game_state.add_withdrawal(return_amount);
-    game_state.add_nft_burn();
 
-    // Emit events
-    emit!(crate::BusinessNFTBurned {
-        player: ctx.accounts.player_owner.key(),
-        mint: ctx.accounts.nft_mint.key(),
-        business_type: business.business_type.to_index() as u8,
-        serial_number: business_nft.serial_number,
-        burned_at: clock.unix_timestamp,
-    });
-    
     emit!(crate::BusinessSoldFromSlot {
         player: ctx.accounts.player_owner.key(),
         slot_index,
         business_type: business.business_type.to_index() as u8,
-        total_invested: business.total_invested_amount,
-        days_held,
-        base_fee_percent: base_sell_fee_percent,
-        slot_discount: sell_fee_discount as u8,
-        final_fee_percent: final_sell_fee_percent,
+        total_invested,
+        days_held: days_held as u64,
+        base_fee_percent,
+        slot_discount,
+        final_fee_percent,
         return_amount,
         sold_at: clock.unix_timestamp,
     });
+
+    Ok(())
+}
+
+/// 🆕 Create business with target level (immediate upgrades)
+pub fn create_business_with_level(
+    ctx: Context<crate::CreateBusinessInSlot>,
+    business_type: u8,
+    deposit_amount: u64,
+    slot_index: u8,
+    target_level: u8,
+) -> Result<()> {
+    let player = &mut ctx.accounts.player;
+    let game_state = &mut ctx.accounts.game_state;
+    let game_config = &ctx.accounts.game_config;
+    let clock = Clock::get()?;
+
+    // Validate target level
+    if target_level > MAX_UPGRADE_LEVEL {
+        return Err(SolanaMafiaError::MaxLevelReached.into());
+    }
+
+    // 🔧 FIX: Инициализировать слоты если игрок новый (код такой же как в create_business)
+    if player.created_at == 0 {
+        msg!("🆕 Initializing new player slots...");
+        
+        // 🚨 ENTRY FEE: Взимаем entry fee
+        let current_total_players = game_state.total_players;
+        let entry_fee = game_config.get_current_entry_fee(current_total_players);
+        
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.treasury_wallet.to_account_info(),
+                },
+            ),
+            entry_fee,
+        )?;
+        
+        // Инициализируем игрока (такой же код как в create_business)
+        player.owner = ctx.accounts.owner.key();
+        player.bump = ctx.bumps.player;
+        
+        let mut slots = [BusinessSlotCompact::new_basic_free(); 9];
+        for i in 0..3 {
+            slots[i] = BusinessSlotCompact::new_basic_free();
+        }
+        for i in 3..6 {
+            slots[i] = BusinessSlotCompact::new_basic_paid();
+        }
+        slots[6] = BusinessSlotCompact::new_premium_unpaid(SlotType::Premium);
+        slots[7] = BusinessSlotCompact::new_premium_unpaid(SlotType::VIP);
+        slots[8] = BusinessSlotCompact::new_premium_unpaid(SlotType::Legendary);
+        
+        player.business_slots = slots;
+        player.unlocked_slots_count = 9;
+        player.premium_slots_count = 3;
+        player.flags = 0;
+        player.created_at = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
+        player.next_earnings_time = PlayerCompact::timestamp_to_u32(clock.unix_timestamp + EARNINGS_INTERVAL);
+        player.earnings_interval = EARNINGS_INTERVAL as u32;
+        player.last_auto_update = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
+        player.set_has_paid_entry(true);
+        
+        game_state.add_player();
+        game_state.total_treasury_collected = game_state.total_treasury_collected
+            .checked_add(entry_fee)
+            .ok_or(SolanaMafiaError::MathOverflow)?;
+        
+        msg!("✅ New player initialized with 9 slots, entry fee: {} lamports", entry_fee);
+    }
+
+    // Validate slot and business type (код как в create_business)
+    if slot_index >= MAX_REGULAR_SLOTS {
+        return Err(SolanaMafiaError::InvalidSlotIndex.into());
+    }
+
+    let slot = &player.business_slots[slot_index as usize];
+    if slot.business.is_some() {
+        return Err(SolanaMafiaError::SlotAlreadyOccupied.into());
+    }
+
+    if (business_type as usize) >= BUSINESS_TYPES_COUNT {
+        return Err(SolanaMafiaError::InvalidBusinessType.into());
+    }
+
+    let business_enum = BusinessType::from_index(business_type).unwrap();
+    let base_cost = business_enum.get_base_cost();
     
-    msg!("🔥 Business sold from slot {}! Days held: {}, Final fee: {}%, Return: {} lamports", 
-        slot_index, days_held, final_sell_fee_percent, return_amount);
+    // 🆕 Рассчитываем стоимость апгрейдов
+    let mut upgrade_costs = [0u64; 3];
+    for level in 1..=target_level {
+        let multiplier = UPGRADE_COST_MULTIPLIERS[(level - 1) as usize];
+        upgrade_costs[(level - 1) as usize] = base_cost
+            .checked_mul(multiplier as u64)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(SolanaMafiaError::MathOverflow)?;
+    }
+
+    // 🔧 ИСПРАВЛЕНИЕ: deposit_amount уже включает полную стоимость (base + upgrades)
+    // Проверяем минимум базовой стоимости
+    if deposit_amount < base_cost {
+        return Err(SolanaMafiaError::InsufficientDeposit.into());
+    }
     
+    // Валидация что deposit_amount соответствует ожидаемой цене
+    let total_upgrade_cost: u64 = upgrade_costs.iter().take(target_level as usize).sum();
+    let expected_total_cost = base_cost
+        .checked_add(total_upgrade_cost)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+    
+    // Логируем для отладки
+    msg!("💰 Price validation: deposit={}, base={}, upgrades={}, expected={}", 
+         deposit_amount, base_cost, total_upgrade_cost, expected_total_cost);
+
+    // 🏪 Проверяем стоимость слота
+    let slot_cost = slot.get_slot_cost(deposit_amount);
+    let business_value = if slot_index >= 3 && slot_index <= 5 && slot_cost > 0 {
+        deposit_amount.checked_add(slot_cost)
+            .ok_or(SolanaMafiaError::MathOverflow)?
+    } else {
+        deposit_amount
+    };
+
+    // Распределение платежей
+    let team_fee = deposit_amount
+        .checked_mul(20)
+        .ok_or(SolanaMafiaError::MathOverflow)?
+        .checked_div(100)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    let treasury_amount = deposit_amount
+        .checked_sub(team_fee)
+        .ok_or(SolanaMafiaError::InsufficientDeposit)?;
+        
+    let total_team_fee = team_fee.checked_add(slot_cost)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    // Переводы
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.owner.to_account_info(),
+                to: ctx.accounts.treasury_wallet.to_account_info(),
+            },
+        ),
+        total_team_fee,
+    )?;
+
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.owner.to_account_info(),
+                to: ctx.accounts.treasury_pda.to_account_info(),
+            },
+        ),
+        treasury_amount,
+    )?;
+
+    // 🆕 Создать бизнес с апгрейдами
+    let business = if target_level > 0 {
+        Business::create_upgraded(
+            business_enum,
+            base_cost,
+            target_level,
+            upgrade_costs,
+            clock.unix_timestamp,
+        )?
+    } else {
+        Business::new(business_enum, base_cost, clock.unix_timestamp)
+    };
+
+    // Оплатить слот и поместить бизнес
+    let actual_slot_cost = player.pay_slot_if_needed(slot_index as usize, deposit_amount)?;
+    player.place_business_in_slot(slot_index as usize, business)?;
+
+    // Обновить статистику игрока
+    player.total_invested = player.total_invested
+        .checked_add(business_value)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    // Обновить игровую статистику
+    game_state.add_investment(deposit_amount);
+    game_state.add_treasury_collection(team_fee);
+    game_state.add_business();
+
+    if player.first_business_time == 0 {
+        player.first_business_time = Player::timestamp_to_u32(clock.unix_timestamp);
+    }
+
+    // Эмитируем событие с правильным уровнем
+    emit!(crate::BusinessCreatedInSlot {
+        player: ctx.accounts.owner.key(),
+        slot_index,
+        business_type,
+        level: business.upgrade_level, // 🆕 ИСПРАВЛЕНИЕ: передаем реальный уровень!
+        base_cost: business_value,
+        slot_cost: actual_slot_cost,
+        total_paid: deposit_amount.checked_add(slot_cost).unwrap_or(deposit_amount),
+        daily_rate: business.daily_rate, // Уже включает апгрейды
+        created_at: clock.unix_timestamp,
+    });
+
+    msg!("🚀 Business created with level {} (target: {})", business.upgrade_level, target_level);
     Ok(())
 }

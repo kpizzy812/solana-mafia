@@ -140,10 +140,17 @@ class TransactionIndexer:
             
             # Filter signatures by slot range
             filtered_signatures = []
+            self.logger.info(f"🔍 Filtering slots - Range: {start_slot} to {end_slot}")
             for sig_info in signatures:
                 slot = sig_info["slot"]
-                if slot >= start_slot and (end_slot is None or slot <= end_slot):
+                signature = sig_info["signature"]
+                is_in_range = slot >= start_slot and (end_slot is None or slot <= end_slot)
+                
+                self.logger.info(f"📍 Checking slot {slot}: in_range={is_in_range}")
+                
+                if is_in_range:
                     filtered_signatures.append(sig_info)
+                    self.logger.info(f"✅ Slot {slot} included (signature: {signature[:20]}...)")
                     
             self.logger.info(
                 "Found signatures in range",
@@ -196,6 +203,8 @@ class TransactionIndexer:
     ):
         """Process a single transaction."""
         try:
+            self.logger.info(f"🔄 Processing transaction: {signature[:20]}...")
+            
             # Check if already processed
             existing_events = await db.execute(
                 select(Event).where(Event.transaction_signature == signature)
@@ -204,21 +213,28 @@ class TransactionIndexer:
                 self.logger.debug("Transaction already processed", signature=signature)
                 return
                 
+            self.logger.info(f"📡 Getting transaction from RPC: {signature[:20]}...")
             # Get transaction details
             tx_info = await self.solana_client.get_transaction(signature)
             if not tx_info:
-                self.logger.warning("Transaction not found", signature=signature)
+                self.logger.warning(f"❌ Transaction not found on RPC: {signature[:20]}...")
                 return
+                
+            self.logger.info(f"✅ Transaction retrieved successfully: {signature[:20]}...")
                 
             stats.transactions_processed += 1
             
+            self.logger.info(f"🔍 Validating transaction: {signature[:20]}...")
             # Validate transaction
             if not self._validate_transaction(tx_info):
-                self.logger.warning("Transaction validation failed", signature=signature)
+                self.logger.warning(f"❌ Transaction validation failed: {signature[:20]}...")
                 return
                 
+            self.logger.info(f"✅ Transaction validation passed: {signature[:20]}...")
+            self.logger.info(f"🔍 Parsing events from transaction: {signature[:20]}...")
             # Parse events from transaction
             parsed_events = self.event_parser.parse_transaction_events(tx_info)
+            self.logger.info(f"🎯 Found {len(parsed_events)} events in transaction: {signature[:20]}...")
             stats.events_found += len(parsed_events)
             
             # Store events in database
@@ -299,13 +315,40 @@ class TransactionIndexer:
                 raise ValidationError(f"Event validation errors: {validation_errors}")
                 
             # Create event record
+            from app.models.event import EventType as DBEventType
+            
+            # Map parser event types to database event types
+            db_event_type_mapping = {
+                "BusinessCreated": DBEventType.BUSINESS_CREATED,
+                "BusinessCreatedInSlot": DBEventType.BUSINESS_CREATED_IN_SLOT,
+                "BusinessUpgraded": DBEventType.BUSINESS_UPGRADED,
+                "BusinessUpgradedInSlot": DBEventType.BUSINESS_UPGRADED_IN_SLOT,
+                "BusinessSold": DBEventType.BUSINESS_SOLD,
+                "BusinessSoldFromSlot": DBEventType.BUSINESS_SOLD_FROM_SLOT,
+                "PlayerCreated": DBEventType.PLAYER_CREATED,
+                "EarningsUpdated": DBEventType.EARNINGS_UPDATED,
+                "EarningsClaimed": DBEventType.EARNINGS_CLAIMED,
+                "SlotUnlocked": DBEventType.SLOT_UNLOCKED,
+                "PremiumSlotPurchased": DBEventType.PREMIUM_SLOT_PURCHASED,
+            }
+            
+            db_event_type = db_event_type_mapping.get(parsed_event.event_type.value)
+            if not db_event_type:
+                raise ValidationError(f"Unknown event type mapping: {parsed_event.event_type.value}")
+            
+            # Extract player_wallet from event data if available
+            player_wallet = None
+            if parsed_event.data:
+                player_wallet = parsed_event.data.get("owner") or parsed_event.data.get("wallet")
+            
             event = Event(
-                signature=parsed_event.signature,
+                transaction_signature=parsed_event.signature,
                 slot=parsed_event.slot,
                 block_time=parsed_event.block_time,
-                event_type=parsed_event.event_type.value,
-                event_data=parsed_event.data,
+                event_type=db_event_type,
                 raw_data=parsed_event.raw_data,
+                parsed_data=parsed_event.data,
+                player_wallet=player_wallet,
                 processed_at=datetime.utcnow()
             )
             
@@ -339,18 +382,46 @@ class TransactionIndexer:
                 last_event = result.scalar_one_or_none()
                 
                 if last_event:
-                    self.checkpoint = IndexerCheckpoint(
-                        last_processed_slot=last_event.slot,
-                        last_processed_signature=last_event.signature,
-                        last_update=last_event.processed_at,
-                        processed_count=0,  # Could be calculated
-                        error_count=0
-                    )
-                else:
-                    # Start from current slot if no previous data
+                    # Check if checkpoint is too old (configurable lag threshold)
                     current_slot = await self.solana_client.get_slot()
+                    MAX_SLOT_LAG = 50000  # If checkpoint is more than 50k slots behind, reset
+                    BACKFILL_SLOTS = 1000  # Start 1k slots back for backfill
+                    
+                    slot_lag = current_slot - last_event.slot
+                    
+                    if slot_lag > MAX_SLOT_LAG:
+                        # Checkpoint too old, reset to recent slot
+                        reset_slot = max(0, current_slot - BACKFILL_SLOTS)
+                        self.logger.warning(
+                            "Checkpoint too old, resetting to recent slot",
+                            old_slot=last_event.slot,
+                            current_slot=current_slot,
+                            slot_lag=slot_lag,
+                            reset_to_slot=reset_slot
+                        )
+                        self.checkpoint = IndexerCheckpoint(
+                            last_processed_slot=reset_slot,
+                            last_processed_signature="",
+                            last_update=datetime.utcnow(),
+                            processed_count=0,
+                            error_count=0
+                        )
+                    else:
+                        # Use existing checkpoint
+                        self.checkpoint = IndexerCheckpoint(
+                            last_processed_slot=last_event.slot,
+                            last_processed_signature=last_event.transaction_signature,
+                            last_update=last_event.processed_at,
+                            processed_count=0,  # Could be calculated
+                            error_count=0
+                        )
+                else:
+                    # Start from earlier slot to catch historical transactions
+                    current_slot = await self.solana_client.get_slot()
+                    # Start from 10000 slots ago to catch business creation transactions (increased to cover user transactions)
+                    start_slot = max(0, current_slot - 10000)
                     self.checkpoint = IndexerCheckpoint(
-                        last_processed_slot=current_slot,
+                        last_processed_slot=start_slot,
                         last_processed_signature="",
                         last_update=datetime.utcnow(),
                         processed_count=0,
@@ -492,7 +563,7 @@ class TransactionIndexer:
                 # Check if we need to process new slots
                 if self.checkpoint and current_slot > self.checkpoint.last_processed_slot:
                     start_slot = self.checkpoint.last_processed_slot + 1
-                    end_slot = min(start_slot + 100, current_slot)  # Process in batches
+                    end_slot = min(start_slot + 2000, current_slot)  # Process in larger batches to catch up
                     
                     self.logger.debug(
                         "Processing new slots",

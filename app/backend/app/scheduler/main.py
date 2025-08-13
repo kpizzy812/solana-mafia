@@ -11,8 +11,9 @@ from typing import Dict, Any
 from app.core.config import settings
 from app.core.database import get_db_session, init_database
 from app.core.logging import setup_logging
-from .earnings_scheduler import EarningsScheduler
+from .earnings_scheduler import BlockchainEarningsScheduler
 from .task_scheduler import TaskScheduler
+from app.services.commission_withdrawal_service import run_withdrawal_processor
 
 import structlog
 
@@ -37,11 +38,9 @@ class SchedulerMain:
             await init_database()
             
             # Initialize schedulers
-            self.earnings_scheduler = EarningsScheduler()
+            self.earnings_scheduler = BlockchainEarningsScheduler()
             self.task_scheduler = TaskScheduler()
             
-            await self.earnings_scheduler.initialize()
-            await self.task_scheduler.initialize()
             
             logger.info("Scheduler service initialized successfully")
             
@@ -68,13 +67,19 @@ class SchedulerMain:
             )
             self.tasks.append(task_scheduler_task)
             
+            # Start commission withdrawal processor
+            withdrawal_processor_task = asyncio.create_task(
+                run_withdrawal_processor()
+            )
+            self.tasks.append(withdrawal_processor_task)
+            
             # Add periodic health check
             health_check_task = asyncio.create_task(
                 self._periodic_health_check()
             )
             self.tasks.append(health_check_task)
             
-            logger.info("Scheduler service started")
+            logger.info("Scheduler service started (includes commission withdrawal processor)")
             
             # Wait for tasks
             await asyncio.gather(*self.tasks, return_exceptions=True)

@@ -8,13 +8,20 @@ and provide additional indexing and caching capabilities.
 from .base import BaseModel, TimestampMixin
 from .player import Player
 from .business import Business, BusinessSlot
-from .nft import BusinessNFT
 from .event import Event
-from .earnings import EarningsSchedule, EarningsHistory
+from .earnings import EarningsHistory
 from .user import User, UserType
 from .referral import (
     ReferralCode, ReferralRelation, ReferralCommission,
-    ReferralStats, ReferralConfig
+    ReferralStats, ReferralConfig, ReferralWithdrawal
+)
+from .prestige import (
+    PrestigeLevel, PrestigeAction, PrestigeHistory, PlayerPrestigeStats,
+    PrestigeConfig, PrestigeRank, ActionType
+)
+from .quest import (
+    Quest, QuestCategory, PlayerQuestProgress, QuestTemplate, QuestReward,
+    QuestType, QuestDifficulty
 )
 
 __all__ = [
@@ -23,9 +30,7 @@ __all__ = [
     "Player",
     "Business",
     "BusinessSlot",
-    "BusinessNFT",
     "Event",
-    "EarningsSchedule",
     "EarningsHistory",
     "User",
     "UserType",
@@ -34,4 +39,19 @@ __all__ = [
     "ReferralCommission",
     "ReferralStats",
     "ReferralConfig",
+    "ReferralWithdrawal",
+    "PrestigeLevel",
+    "PrestigeAction", 
+    "PrestigeHistory",
+    "PlayerPrestigeStats",
+    "PrestigeConfig",
+    "PrestigeRank",
+    "ActionType",
+    "Quest",
+    "QuestCategory",
+    "PlayerQuestProgress",
+    "QuestTemplate",
+    "QuestReward",
+    "QuestType",
+    "QuestDifficulty",
 ]

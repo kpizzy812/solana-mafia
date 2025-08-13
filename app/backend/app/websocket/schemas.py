@@ -17,6 +17,8 @@ class MessageType(str, Enum):
     REFERRAL_UPDATE = "referral_update"
     REFERRAL_COMMISSION = "referral_commission"
     REFERRAL_NEW = "referral_new"
+    PRESTIGE_UPDATE = "prestige_update"  # Prestige point and level updates
+    EVENT = "event"  # Real-time blockchain events
     ERROR = "error"
     CONNECTION_STATUS = "connection_status"
     SUBSCRIPTION = "subscription"
@@ -26,7 +28,7 @@ class MessageType(str, Enum):
 class WebSocketMessage(BaseModel):
     """Base WebSocket message schema."""
     type: MessageType
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     data: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -86,6 +88,14 @@ class ReferralNewMessage(WebSocketMessage):
     )
 
 
+class PrestigeUpdateMessage(WebSocketMessage):
+    """Prestige update message schema."""
+    type: MessageType = MessageType.PRESTIGE_UPDATE
+    data: Dict[str, Any] = Field(
+        description="Prestige update data including points, level, and awards"
+    )
+
+
 class ErrorMessage(WebSocketMessage):
     """Error message schema."""
     type: MessageType = MessageType.ERROR
@@ -119,6 +129,7 @@ WebSocketMessageUnion = Union[
     ReferralUpdateMessage,
     ReferralCommissionMessage,
     ReferralNewMessage,
+    PrestigeUpdateMessage,
     ErrorMessage,
     ConnectionStatusMessage,
     SubscriptionMessage
@@ -143,4 +154,4 @@ class WebSocketResponse(BaseModel):
     success: bool = True
     message: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())

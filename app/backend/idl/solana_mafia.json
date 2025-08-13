@@ -1,0 +1,2235 @@
+{
+  "address": "33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G",
+  "metadata": {
+    "name": "solana_mafia",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "check_earnings_due",
+      "docs": [
+        "🆕 Проверить нужно ли обновление earnings игроку"
+      ],
+      "discriminator": [
+        75,
+        240,
+        245,
+        6,
+        209,
+        65,
+        140,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim_earnings",
+      "docs": [
+        "Claim earnings with slot-based system"
+      ],
+      "discriminator": [
+        49,
+        99,
+        161,
+        170,
+        22,
+        233,
+        54,
+        140
+      ],
+      "accounts": [
+        {
+          "name": "player_owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_wallet",
+          "docs": [
+            "💰 Treasury wallet для получения claim fee (0.01 SOL)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_business",
+      "docs": [
+        "🏪 Create business in specific slot"
+      ],
+      "discriminator": [
+        151,
+        158,
+        148,
+        231,
+        53,
+        237,
+        97,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_wallet",
+          "writable": true
+        },
+        {
+          "name": "treasury_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "business_type",
+          "type": "u8"
+        },
+        {
+          "name": "deposit_amount",
+          "type": "u64"
+        },
+        {
+          "name": "slot_index",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "create_business_with_level",
+      "docs": [
+        "🆕 Create business with target level (immediate upgrades)"
+      ],
+      "discriminator": [
+        148,
+        153,
+        113,
+        3,
+        2,
+        60,
+        136,
+        62
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_wallet",
+          "writable": true
+        },
+        {
+          "name": "treasury_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "business_type",
+          "type": "u8"
+        },
+        {
+          "name": "deposit_amount",
+          "type": "u64"
+        },
+        {
+          "name": "slot_index",
+          "type": "u8"
+        },
+        {
+          "name": "target_level",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "create_player",
+      "docs": [
+        "Create new player (with entry fee)"
+      ],
+      "discriminator": [
+        19,
+        178,
+        189,
+        216,
+        159,
+        134,
+        0,
+        192
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_wallet",
+          "docs": [
+            "Treasury wallet where entry fee goes"
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_global_stats",
+      "docs": [
+        "🆕 Получить глобальную статистику"
+      ],
+      "discriminator": [
+        93,
+        120,
+        236,
+        236,
+        175,
+        200,
+        64,
+        245
+      ],
+      "accounts": [
+        {
+          "name": "game_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_player_data",
+      "docs": [
+        "🆕 Получить данные игрока для фронтенда (с новой системой слотов)"
+      ],
+      "discriminator": [
+        235,
+        107,
+        26,
+        67,
+        45,
+        235,
+        201,
+        54
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_valid_player_businesses",
+      "docs": [
+        "🆕 Получить только валидные (принадлежащие) бизнесы игрока"
+      ],
+      "discriminator": [
+        33,
+        175,
+        104,
+        29,
+        178,
+        200,
+        191,
+        3
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "health_check_player",
+      "docs": [
+        "Health check for player data"
+      ],
+      "discriminator": [
+        78,
+        215,
+        251,
+        61,
+        206,
+        59,
+        125,
+        62
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize",
+      "docs": [
+        "Initialize the game with treasury wallet"
+      ],
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "treasury_wallet",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "sell_business",
+      "docs": [
+        "🔥 Sell business from slot (with early exit fees)"
+      ],
+      "discriminator": [
+        123,
+        42,
+        164,
+        80,
+        156,
+        202,
+        110,
+        81
+      ],
+      "accounts": [
+        {
+          "name": "player_owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "slot_index",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "update_earnings",
+      "docs": [
+        "🔓 Update earnings (permissionless) - anyone can update any player's earnings"
+      ],
+      "discriminator": [
+        89,
+        227,
+        178,
+        115,
+        56,
+        123,
+        25,
+        192
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "docs": [
+            "The target player account to update earnings for"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_entry_fee",
+      "docs": [
+        "💰 Update entry fee (admin only) - for backend control and promotions"
+      ],
+      "discriminator": [
+        243,
+        98,
+        10,
+        151,
+        230,
+        189,
+        170,
+        180
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_fee_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "upgrade_business",
+      "docs": [
+        "⬆️ Upgrade business in slot"
+      ],
+      "discriminator": [
+        228,
+        60,
+        245,
+        122,
+        138,
+        220,
+        234,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "player_owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_wallet",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "slot_index",
+          "type": "u8"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GameConfig",
+      "discriminator": [
+        45,
+        146,
+        146,
+        33,
+        170,
+        69,
+        96,
+        133
+      ]
+    },
+    {
+      "name": "GameState",
+      "discriminator": [
+        144,
+        94,
+        208,
+        172,
+        248,
+        99,
+        134,
+        120
+      ]
+    },
+    {
+      "name": "PlayerCompact",
+      "discriminator": [
+        47,
+        54,
+        238,
+        192,
+        110,
+        59,
+        84,
+        154
+      ]
+    },
+    {
+      "name": "Treasury",
+      "discriminator": [
+        238,
+        239,
+        123,
+        238,
+        89,
+        1,
+        168,
+        253
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BusinessCreated",
+      "discriminator": [
+        63,
+        233,
+        116,
+        106,
+        68,
+        16,
+        86,
+        2
+      ]
+    },
+    {
+      "name": "BusinessCreatedInSlot",
+      "discriminator": [
+        74,
+        25,
+        26,
+        232,
+        141,
+        86,
+        55,
+        28
+      ]
+    },
+    {
+      "name": "BusinessSold",
+      "discriminator": [
+        47,
+        241,
+        35,
+        164,
+        185,
+        195,
+        226,
+        195
+      ]
+    },
+    {
+      "name": "BusinessSoldFromSlot",
+      "discriminator": [
+        10,
+        234,
+        116,
+        19,
+        68,
+        21,
+        149,
+        244
+      ]
+    },
+    {
+      "name": "BusinessUpgraded",
+      "discriminator": [
+        160,
+        169,
+        224,
+        253,
+        190,
+        56,
+        162,
+        157
+      ]
+    },
+    {
+      "name": "BusinessUpgradedInSlot",
+      "discriminator": [
+        102,
+        117,
+        57,
+        41,
+        21,
+        116,
+        201,
+        45
+      ]
+    },
+    {
+      "name": "EarningsClaimed",
+      "discriminator": [
+        106,
+        170,
+        154,
+        105,
+        21,
+        43,
+        189,
+        97
+      ]
+    },
+    {
+      "name": "EarningsUpdated",
+      "discriminator": [
+        248,
+        233,
+        231,
+        77,
+        17,
+        8,
+        94,
+        66
+      ]
+    },
+    {
+      "name": "PlayerCreated",
+      "discriminator": [
+        254,
+        9,
+        74,
+        81,
+        92,
+        5,
+        189,
+        220
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "EntryFeeNotPaid",
+      "msg": "Entry fee not paid"
+    },
+    {
+      "code": 6001,
+      "name": "InsufficientDeposit",
+      "msg": "Insufficient deposit amount"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidReferrer",
+      "msg": "Invalid referrer"
+    },
+    {
+      "code": 6003,
+      "name": "CannotReferYourself",
+      "msg": "Cannot refer yourself"
+    },
+    {
+      "code": 6004,
+      "name": "ReferrerChainTooDeep",
+      "msg": "Referrer chain too deep"
+    },
+    {
+      "code": 6005,
+      "name": "PlayerAlreadyExists",
+      "msg": "Player already exists"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidBusinessType",
+      "msg": "Invalid business type"
+    },
+    {
+      "code": 6007,
+      "name": "MaxBusinessesReached",
+      "msg": "Maximum businesses limit reached"
+    },
+    {
+      "code": 6008,
+      "name": "BusinessNotFound",
+      "msg": "Business not found"
+    },
+    {
+      "code": 6009,
+      "name": "BusinessNotOwned",
+      "msg": "Business not owned by player"
+    },
+    {
+      "code": 6010,
+      "name": "BusinessHasActiveEarnings",
+      "msg": "Business still has active earnings"
+    },
+    {
+      "code": 6011,
+      "name": "NoEarningsToClaim",
+      "msg": "No earnings to claim"
+    },
+    {
+      "code": 6012,
+      "name": "TooEarlyToClaim",
+      "msg": "Too early to claim earnings"
+    },
+    {
+      "code": 6013,
+      "name": "TooEarlyToUpdate",
+      "msg": "Too early to update earnings"
+    },
+    {
+      "code": 6014,
+      "name": "EarningsNotDue",
+      "msg": "Earnings update not due yet"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidUpgradeLevel",
+      "msg": "Invalid upgrade level"
+    },
+    {
+      "code": 6016,
+      "name": "InsufficientFundsForUpgrade",
+      "msg": "Insufficient funds for upgrade"
+    },
+    {
+      "code": 6017,
+      "name": "BusinessMaxLevel",
+      "msg": "Business already at max upgrade level"
+    },
+    {
+      "code": 6018,
+      "name": "CannotUpgradeInactive",
+      "msg": "Cannot upgrade inactive business"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidUpgradeSequence",
+      "msg": "Invalid upgrade level sequence"
+    },
+    {
+      "code": 6020,
+      "name": "UpgradeCostMismatch",
+      "msg": "Upgrade cost mismatch"
+    },
+    {
+      "code": 6021,
+      "name": "NFTUpgradeFailed",
+      "msg": "NFT upgrade failed"
+    },
+    {
+      "code": 6022,
+      "name": "NFTBurnFailed",
+      "msg": "NFT burn failed"
+    },
+    {
+      "code": 6023,
+      "name": "NFTMetadataFailed",
+      "msg": "NFT metadata creation failed"
+    },
+    {
+      "code": 6024,
+      "name": "SlotAlreadyUnlocked",
+      "msg": "Slot already unlocked"
+    },
+    {
+      "code": 6025,
+      "name": "SlotNotUnlocked",
+      "msg": "Slot not unlocked"
+    },
+    {
+      "code": 6026,
+      "name": "SlotOccupied",
+      "msg": "Slot is occupied"
+    },
+    {
+      "code": 6027,
+      "name": "InvalidSlotIndex",
+      "msg": "Invalid slot index"
+    },
+    {
+      "code": 6028,
+      "name": "NoMoreSlotsToUnlock",
+      "msg": "No more slots to unlock"
+    },
+    {
+      "code": 6029,
+      "name": "InvalidSlotType",
+      "msg": "Invalid slot type"
+    },
+    {
+      "code": 6030,
+      "name": "InsufficientFundsForSlot",
+      "msg": "Insufficient funds for slot unlock"
+    },
+    {
+      "code": 6031,
+      "name": "SlotEmpty",
+      "msg": "Slot is empty"
+    },
+    {
+      "code": 6032,
+      "name": "SlotAlreadyOccupied",
+      "msg": "Slot already occupied"
+    },
+    {
+      "code": 6033,
+      "name": "SlotAlreadyPaid",
+      "msg": "Slot already paid"
+    },
+    {
+      "code": 6034,
+      "name": "BusinessNotActive",
+      "msg": "Business not active"
+    },
+    {
+      "code": 6035,
+      "name": "MaxLevelReached",
+      "msg": "Maximum level reached"
+    },
+    {
+      "code": 6036,
+      "name": "NoSlotsToUnlock",
+      "msg": "No slots to unlock"
+    },
+    {
+      "code": 6037,
+      "name": "NoSlotsAvailable",
+      "msg": "No slots available"
+    },
+    {
+      "code": 6038,
+      "name": "UnauthorizedAdmin",
+      "msg": "Unauthorized admin action"
+    },
+    {
+      "code": 6039,
+      "name": "EmergencyPauseActive",
+      "msg": "Emergency pause activated"
+    },
+    {
+      "code": 6040,
+      "name": "UnauthorizedEmergencyAdmin",
+      "msg": "Only emergency admin can use this function"
+    },
+    {
+      "code": 6041,
+      "name": "GamePaused",
+      "msg": "Game is paused"
+    },
+    {
+      "code": 6042,
+      "name": "InvalidFeePercentage",
+      "msg": "Invalid fee percentage"
+    },
+    {
+      "code": 6043,
+      "name": "TooEarlyToCreateBusiness",
+      "msg": "Too early to create another business"
+    },
+    {
+      "code": 6044,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "Business",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business_type",
+            "type": {
+              "defined": {
+                "name": "BusinessType"
+              }
+            }
+          },
+          {
+            "name": "base_invested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_invested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "daily_rate",
+            "type": "u16"
+          },
+          {
+            "name": "upgrade_level",
+            "type": "u8"
+          },
+          {
+            "name": "upgrade_history",
+            "type": {
+              "array": [
+                "u64",
+                3
+              ]
+            }
+          },
+          {
+            "name": "total_earned",
+            "type": "u64"
+          },
+          {
+            "name": "last_claim",
+            "type": "i64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "business_type",
+            "type": "u8"
+          },
+          {
+            "name": "invested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "daily_rate",
+            "type": "u16"
+          },
+          {
+            "name": "treasury_fee",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessCreatedInSlot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "slot_index",
+            "type": "u8"
+          },
+          {
+            "name": "business_type",
+            "type": "u8"
+          },
+          {
+            "name": "level",
+            "type": "u8"
+          },
+          {
+            "name": "base_cost",
+            "type": "u64"
+          },
+          {
+            "name": "slot_cost",
+            "type": "u64"
+          },
+          {
+            "name": "total_paid",
+            "type": "u64"
+          },
+          {
+            "name": "daily_rate",
+            "type": "u16"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessSlotCompact",
+      "docs": [
+        "🚀 ULTRA-OPTIMIZED: Битовые флаги для слотов"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "flags",
+            "docs": [
+              "Упакованные флаги (32 бита):",
+              "- Биты 0-1: SlotType (0=Basic, 1=Premium, 2=VIP, 3=Legendary)",
+              "- Бит 2: is_unlocked (ВСЕГДА true в новой системе)",
+              "- Бит 3: has_business",
+              "- Бит 4: is_paid (оплачен ли слот)",
+              "- Биты 5-31: зарезервировано"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "business",
+            "docs": [
+              "Бизнес в слоте (если есть)"
+            ],
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "Business"
+                }
+              }
+            }
+          },
+          {
+            "name": "slot_cost_paid",
+            "docs": [
+              "Стоимость слота при первой оплате (u64 - Legendary slot = 5 SOL > u32 limit)"
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessSold",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "business_index",
+            "type": "u8"
+          },
+          {
+            "name": "days_held",
+            "type": "u64"
+          },
+          {
+            "name": "sell_fee_percent",
+            "type": "u8"
+          },
+          {
+            "name": "return_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessSoldFromSlot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "slot_index",
+            "type": "u8"
+          },
+          {
+            "name": "business_type",
+            "type": "u8"
+          },
+          {
+            "name": "total_invested",
+            "type": "u64"
+          },
+          {
+            "name": "days_held",
+            "type": "u64"
+          },
+          {
+            "name": "base_fee_percent",
+            "type": "u8"
+          },
+          {
+            "name": "slot_discount",
+            "type": "u8"
+          },
+          {
+            "name": "final_fee_percent",
+            "type": "u8"
+          },
+          {
+            "name": "return_amount",
+            "type": "u64"
+          },
+          {
+            "name": "sold_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "TobaccoShop"
+          },
+          {
+            "name": "FuneralService"
+          },
+          {
+            "name": "CarWorkshop"
+          },
+          {
+            "name": "ItalianRestaurant"
+          },
+          {
+            "name": "GentlemenClub"
+          },
+          {
+            "name": "CharityFund"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessUpgraded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "business_index",
+            "type": "u8"
+          },
+          {
+            "name": "new_level",
+            "type": "u8"
+          },
+          {
+            "name": "upgrade_cost",
+            "type": "u64"
+          },
+          {
+            "name": "new_daily_rate",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessUpgradedInSlot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "slot_index",
+            "type": "u8"
+          },
+          {
+            "name": "old_level",
+            "type": "u8"
+          },
+          {
+            "name": "new_level",
+            "type": "u8"
+          },
+          {
+            "name": "upgrade_cost",
+            "type": "u64"
+          },
+          {
+            "name": "new_daily_rate",
+            "type": "u16"
+          },
+          {
+            "name": "upgraded_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EarningsClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "claimed_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EarningsUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "earnings_added",
+            "type": "u64"
+          },
+          {
+            "name": "total_pending",
+            "type": "u64"
+          },
+          {
+            "name": "next_earnings_time",
+            "type": "i64"
+          },
+          {
+            "name": "businesses_count",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Admin authority who can update config"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "business_rates",
+            "docs": [
+              "Daily rates for each business type (basis points)"
+            ],
+            "type": {
+              "array": [
+                "u16",
+                6
+              ]
+            }
+          },
+          {
+            "name": "min_deposits",
+            "docs": [
+              "Minimum deposits for each business type"
+            ],
+            "type": {
+              "array": [
+                "u64",
+                6
+              ]
+            }
+          },
+          {
+            "name": "base_entry_fee",
+            "docs": [
+              "Base entry fee (starts from this amount)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_entry_fee",
+            "docs": [
+              "Maximum entry fee (caps at this amount)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fee_increment",
+            "docs": [
+              "Fee increment per milestone"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "players_per_milestone",
+            "docs": [
+              "Players per milestone"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "treasury_fee_percent",
+            "docs": [
+              "Treasury fee percentage (what goes to team)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "upgrade_costs",
+            "docs": [
+              "Upgrade costs for each level"
+            ],
+            "type": {
+              "array": [
+                "u64",
+                3
+              ]
+            }
+          },
+          {
+            "name": "upgrade_bonuses",
+            "docs": [
+              "Upgrade bonuses for each level (basis points)"
+            ],
+            "type": {
+              "array": [
+                "u16",
+                3
+              ]
+            }
+          },
+          {
+            "name": "max_businesses_per_player",
+            "docs": [
+              "Maximum businesses per player"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "registrations_open",
+            "docs": [
+              "Whether new registrations are allowed"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "current_entry_fee",
+            "docs": [
+              "Current entry fee in lamports (controlled by backend)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for PDA"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_players",
+            "type": "u64"
+          },
+          {
+            "name": "total_invested",
+            "type": "u64"
+          },
+          {
+            "name": "total_withdrawn",
+            "type": "u64"
+          },
+          {
+            "name": "total_treasury_collected",
+            "type": "u64"
+          },
+          {
+            "name": "total_businesses",
+            "type": "u64"
+          },
+          {
+            "name": "is_paused",
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlayerCompact",
+      "docs": [
+        "🚀 ULTRA-OPTIMIZED Player структура"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "business_slots",
+            "docs": [
+              "🆕 ФИКСИРОВАННЫЙ МАССИВ вместо Vec - экономия 24 байта overhead!"
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "BusinessSlotCompact"
+                  }
+                },
+                9
+              ]
+            }
+          },
+          {
+            "name": "unlocked_slots_count",
+            "docs": [
+              "🆕 УПАКОВАННЫЕ СЧЕТЧИКИ (u8 вместо отдельных полей)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "premium_slots_count",
+            "type": "u8"
+          },
+          {
+            "name": "flags",
+            "docs": [
+              "🆕 УПАКОВАННЫЕ ФЛАГИ В ОДИН u32:",
+              "- Бит 0: has_paid_entry",
+              "- Биты 1-31: зарезервированы для будущих флагов"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "total_invested",
+            "docs": [
+              "🚨 ИСПРАВЛЕНО: Критические поля u64 для больших сумм, остальные u32"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_upgrade_spent",
+            "type": "u64"
+          },
+          {
+            "name": "total_slot_spent",
+            "type": "u64"
+          },
+          {
+            "name": "total_earned",
+            "type": "u64"
+          },
+          {
+            "name": "pending_earnings",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "🆕 u32 TIMESTAMPS вместо i64 (до 2106 года)"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "next_earnings_time",
+            "type": "u32"
+          },
+          {
+            "name": "earnings_interval",
+            "type": "u32"
+          },
+          {
+            "name": "first_business_time",
+            "type": "u32"
+          },
+          {
+            "name": "last_auto_update",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlayerCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "entry_fee",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "next_earnings_time",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Treasury",
+      "docs": [
+        "Treasury PDA для хранения средств игроков (80% от депозитов)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}

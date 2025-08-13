@@ -72,8 +72,7 @@ class Event(BaseModel, TimestampMixin):
     
     transaction_signature: Mapped[str] = mapped_column(
         String(88),
-        comment="Transaction signature",
-        index=True
+        comment="Transaction signature"
     )
     
     instruction_index: Mapped[int] = mapped_column(
@@ -91,13 +90,11 @@ class Event(BaseModel, TimestampMixin):
     # Blockchain data
     slot: Mapped[int] = mapped_column(
         BigInteger,
-        comment="Blockchain slot number",
-        index=True
+        comment="Blockchain slot number"
     )
     
     block_time: Mapped[datetime] = mapped_column(
-        comment="Block timestamp",
-        index=True
+        comment="Block timestamp"
     )
     
     # Event data
@@ -114,8 +111,7 @@ class Event(BaseModel, TimestampMixin):
     # Related entities
     player_wallet: Mapped[Optional[str]] = mapped_column(
         String(44),
-        comment="Related player wallet",
-        index=True
+        comment="Related player wallet"
     )
     
     business_mint: Mapped[Optional[str]] = mapped_column(

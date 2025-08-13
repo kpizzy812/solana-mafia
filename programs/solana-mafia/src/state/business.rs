@@ -46,19 +46,8 @@ impl BusinessType {
         BUSINESS_RATES[self.to_index()]
     }
 
-    /// Get NFT name for this business type
-    pub fn get_nft_name(&self) -> &'static str {
-        BUSINESS_NFT_NAMES[self.to_index()]
-    }
 
-    /// Get upgrade name for specific level
-    pub fn get_upgrade_name(&self, level: u8) -> &'static str {
-        if level < 4 {
-            BUSINESS_UPGRADE_NAMES[self.to_index()][level as usize]
-        } else {
-            BUSINESS_UPGRADE_NAMES[self.to_index()][3] // Maximum level
-        }
-    }
+    // Убрано get_upgrade_name - было для NFT метадаты
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
@@ -73,7 +62,6 @@ pub struct Business {
     pub last_claim: i64,
     pub created_at: i64,
     pub is_active: bool,
-    pub nft_mint: Option<Pubkey>,
 }
 
 impl Business {
@@ -88,7 +76,7 @@ impl Business {
         8 +  // last_claim
         8 +  // created_at
         1 +  // is_active
-        33;  // nft_mint Option<Pubkey>
+        1;   // is_active bool
 
     /// Создать новый базовый бизнес
     pub fn new(
@@ -109,7 +97,6 @@ impl Business {
             last_claim: current_time,
             created_at: current_time,
             is_active: true,
-            nft_mint: None,
         }
     }
 
@@ -150,11 +137,11 @@ impl Business {
             .checked_add(upgrade_cost)
             .ok_or(ProgramError::ArithmeticOverflow)?;
         
-        // Увеличиваем доходность
-        let yield_bonus = UPGRADE_YIELD_BONUSES[(new_level - 1) as usize];
-        self.daily_rate = self.daily_rate
-            .checked_add(yield_bonus)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
+        // 🔧 ИСПРАВЛЕНИЕ: daily_rate НЕ зависит от уровня апгрейда!
+        // Уровни апгрейда увеличивают только invested_amount, но НЕ процентную ставку
+        // daily_rate остается базовым для всех уровней
+        let base_rate = self.business_type.get_base_rate();
+        self.daily_rate = base_rate;  // Всегда базовая ставка, без бонусов
         
         // Обновляем уровень
         self.upgrade_level = new_level;
@@ -183,29 +170,37 @@ impl Business {
         self.total_invested_amount // База + все улучшения
     }
 
-    /// 🆕 Получить название уровня для NFT (специфичное для каждого бизнеса)
-    pub fn get_nft_level_name(&self) -> &'static str {
-        self.business_type.get_upgrade_name(self.upgrade_level)
+    /// Получить стоимость улучшения для определенного уровня
+    pub fn get_upgrade_cost(&self, target_level: u8) -> Result<u64> {
+        if target_level <= self.upgrade_level || target_level > MAX_UPGRADE_LEVEL {
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        let multiplier = UPGRADE_COST_MULTIPLIERS[(target_level - 1) as usize];
+        let upgrade_cost = self.base_invested_amount
+            .checked_mul(multiplier as u64)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        
+        Ok(upgrade_cost)
     }
 
-    /// 🆕 Получить URI для NFT текущего уровня
-    pub fn get_nft_uri(&self) -> &'static str {
-        BUSINESS_NFT_URIS_BY_LEVEL[self.business_type.to_index()][self.upgrade_level as usize]
+    /// Улучшить бизнес до определенного уровня
+    pub fn upgrade_to_level(&mut self, target_level: u8, upgrade_cost: u64) -> Result<()> {
+        if target_level != self.upgrade_level + 1 || target_level > MAX_UPGRADE_LEVEL {
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Проверяем корректность стоимости
+        let expected_cost = self.get_upgrade_cost(target_level)?;
+        if upgrade_cost != expected_cost {
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Применяем улучшение
+        self.apply_upgrade(target_level, upgrade_cost)
     }
 
-    /// 🆕 Получить полное название NFT
-    pub fn get_full_nft_name(&self, serial_number: u64) -> String {
-        format!("{} {} #{}",
-            self.get_nft_level_name(),
-            self.business_type.get_nft_name(),
-            serial_number
-        )
-    }
-
-    /// Set NFT mint address
-    pub fn set_nft_mint(&mut self, mint: Pubkey) {
-        self.nft_mint = Some(mint);
-    }
 
     /// Calculate daily earnings with current rate
     pub fn calculate_daily_earnings(&self) -> u64 {
@@ -269,8 +264,13 @@ impl Business {
         }
         
         let daily_earnings = self.calculate_daily_earnings();
-        let seconds_earnings = daily_earnings as u128 / 86_400;
-        (seconds_earnings * seconds as u128).min(u64::MAX as u128) as u64
+        // Используем более точный расчет для избежания потери точности при малых числах
+        let total_earnings = (daily_earnings as u128)
+            .checked_mul(seconds as u128)
+            .and_then(|x| x.checked_div(86_400))
+            .unwrap_or(0);
+            
+        total_earnings.min(u64::MAX as u128) as u64
     }
 
     /// Health check

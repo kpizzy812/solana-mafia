@@ -3,8 +3,8 @@ Configuration management using Pydantic Settings.
 Supports multiple environments: development, staging, production.
 """
 
-from typing import Optional, List
-from pydantic import Field, validator
+from typing import Optional, List, Union
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     host: str = "127.0.0.1"
     port: int = 8000
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:3001"]
+    cors_origins: Union[str, List[str]] = Field(
+        default=["http://localhost:3000", "http://localhost:3001"],
+        env="CORS_ORIGINS"
+    )
     
     # Database
     database_url: str = Field(
@@ -44,11 +47,32 @@ class Settings(BaseSettings):
         default="https://api.devnet.solana.com",
         env="SOLANA_RPC_URL"
     )
+    solana_ws_url: str = Field(
+        default="wss://api.devnet.solana.com/",
+        env="SOLANA_WS_URL"
+    )
     solana_program_id: str = Field(
-        default="3Ly6bEWRfKyVGwrRN27gHhBogo1K4HbZyk69KHW9AUx7",
+        default="HifXYhFJapXPeBgKKZu8gmdc7cZvfERJ9aEkchHxyBLS",
         env="SOLANA_PROGRAM_ID"
     )
     solana_commitment: str = "confirmed"
+    
+    # Admin wallet for price updates
+    admin_private_key: Optional[str] = Field(
+        default=None,
+        env="ADMIN_PRIVATE_KEY",
+        description="Base58 private key for admin operations (entry fee updates)"
+    )
+    
+    # Dynamic pricing settings
+    dynamic_pricing_enabled: bool = Field(
+        default=True,
+        env="DYNAMIC_PRICING_ENABLED"
+    )
+    price_update_interval: int = Field(
+        default=300,  # 5 minutes
+        env="PRICE_UPDATE_INTERVAL"
+    )
     
     # Indexer settings
     indexer_batch_size: int = 1000
@@ -77,6 +101,24 @@ class Settings(BaseSettings):
         default=24,
         env="TELEGRAM_AUTH_MAX_AGE_HOURS",
         description="Maximum age of Telegram auth data in hours"
+    )
+    
+    # Social Media Links for Quests
+    social_twitter_url: str = Field(
+        default="https://twitter.com/SolanaMafia",
+        env="SOCIAL_TWITTER_URL"
+    )
+    social_telegram_url: str = Field(
+        default="https://t.me/SolanaMafia",
+        env="SOCIAL_TELEGRAM_URL"
+    )
+    social_telegram_chat_url: str = Field(
+        default="https://t.me/SolanaMafiaChat",
+        env="SOCIAL_TELEGRAM_CHAT_URL"
+    )
+    social_ceo_channel_url: str = Field(
+        default="https://t.me/SolanaMafiaCEO",
+        env="SOCIAL_CEO_CHANNEL_URL"
     )
     
     # Logging
@@ -108,19 +150,33 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 100
     rate_limit_window: int = 60  # seconds
     
-    @validator("environment")
+    @field_validator("environment")
+    @classmethod
     def validate_environment(cls, v: str) -> str:
         allowed = ["development", "staging", "production"]
         if v not in allowed:
             raise ValueError(f"Environment must be one of: {allowed}")
         return v
     
-    @validator("log_level")
+    @field_validator("log_level")
+    @classmethod
     def validate_log_level(cls, v: str) -> str:
         allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in allowed:
             raise ValueError(f"Log level must be one of: {allowed}")
         return v.upper()
+    
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def validate_cors_origins(cls, v):
+        if isinstance(v, str):
+            # Parse comma-separated string
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        elif isinstance(v, list):
+            return v
+        else:
+            # Default fallback
+            return ["http://localhost:3000", "http://localhost:3001"]
     
     @property
     def is_development(self) -> bool:
@@ -130,9 +186,11 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.environment == "production"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {
+        "env_file": "../../.env",  # Путь к .env в корне проекта
+        "case_sensitive": False,
+        "extra": "ignore"
+    }
 
 
 # Global settings instance
@@ -189,6 +247,15 @@ class SolanaConfig:
         """Get Solana RPC client configuration."""
         return {
             "endpoint": settings.solana_rpc_url,
+            "commitment": settings.solana_commitment,
+            "timeout": 30,
+        }
+    
+    @staticmethod
+    def get_websocket_config() -> dict:
+        """Get Solana WebSocket client configuration."""
+        return {
+            "endpoint": settings.solana_ws_url,
             "commitment": settings.solana_commitment,
             "timeout": 30,
         }

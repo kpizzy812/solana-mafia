@@ -25,6 +25,11 @@ class RedisClient:
         
     def _build_redis_url(self) -> str:
         """Build Redis URL from settings."""
+        # First try to use redis_url from settings (for Docker environments)
+        if hasattr(settings, 'redis_url') and settings.redis_url:
+            return settings.redis_url
+            
+        # Fallback to building URL from components
         redis_host = getattr(settings, 'redis_host', 'localhost')
         redis_port = getattr(settings, 'redis_port', 6379)
         redis_db = getattr(settings, 'redis_db', 0)

@@ -1,6 +1,6 @@
 """
 Main entry point for the indexer service.
-Indexes Solana blockchain events and transactions for the game.
+Now simplified to use SignatureProcessor-based architecture instead of complex WebSocket subscriptions.
 """
 
 import asyncio
@@ -11,8 +11,7 @@ from typing import Dict, Any
 from app.core.config import settings
 from app.core.database import get_db_session, init_database
 from app.core.logging import setup_logging
-from .event_indexer import EventIndexer
-from .transaction_indexer import TransactionIndexer
+from .simple_realtime_notifier import SimpleRealtimeNotifier
 
 import structlog
 
@@ -20,53 +19,48 @@ logger = structlog.get_logger(__name__)
 
 
 class IndexerMain:
-    """Main indexer service coordinator."""
+    """
+    Simplified indexer service coordinator.
+    
+    Now uses SignatureProcessor architecture:
+    - Frontend sends signatures to API
+    - SignatureProcessor handles all blockchain processing
+    - SimpleRealtimeNotifier handles UI notifications
+    - No complex WebSocket blockchain subscriptions
+    """
     
     def __init__(self):
-        self.event_indexer = None
-        self.transaction_indexer = None
+        self.simple_notifier = None
         self.running = False
         self.tasks = []
     
     async def initialize(self):
-        """Initialize indexer components."""
+        """Initialize simple notification components."""
         try:
-            logger.info("Initializing indexer service")
+            logger.info("🚀 Initializing simplified indexer service")
             
             # Initialize database first
             await init_database()
             
-            # Initialize indexers
-            self.event_indexer = EventIndexer()
-            self.transaction_indexer = TransactionIndexer()
+            # Initialize simple real-time notifier (UI only)
+            self.simple_notifier = SimpleRealtimeNotifier()
+            await self.simple_notifier.initialize()
             
-            await self.event_indexer.initialize()
-            await self.transaction_indexer.initialize()
-            
-            logger.info("Indexer service initialized successfully")
+            logger.info("✅ Simplified indexer service initialized successfully")
             
         except Exception as e:
-            logger.error("Failed to initialize indexer", error=str(e))
+            logger.error("❌ Failed to initialize simplified indexer", error=str(e))
             raise
     
     async def start(self):
-        """Start the indexer service."""
+        """Start the simplified indexer service."""
         try:
-            logger.info("Starting indexer service")
+            logger.info("🚀 Starting simplified indexer service")
             
             self.running = True
             
-            # Start event indexer
-            event_task = asyncio.create_task(
-                self.event_indexer.start()
-            )
-            self.tasks.append(event_task)
-            
-            # Start transaction indexer  
-            transaction_task = asyncio.create_task(
-                self.transaction_indexer.start()
-            )
-            self.tasks.append(transaction_task)
+            # Start simple real-time notifier (just WebSocket UI notifications)
+            await self.simple_notifier.start()
             
             # Add periodic health check
             health_check_task = asyncio.create_task(
@@ -74,18 +68,24 @@ class IndexerMain:
             )
             self.tasks.append(health_check_task)
             
-            logger.info("Indexer service started")
+            logger.info("✅ Simplified indexer service started - UI notifications ready")
+            logger.info("📝 Note: Transaction processing handled by SignatureProcessor API")
             
-            # Wait for tasks
-            await asyncio.gather(*self.tasks, return_exceptions=True)
+            # Wait for health check task
+            if self.tasks:
+                await asyncio.gather(*self.tasks, return_exceptions=True)
+            else:
+                # Just keep running until stopped
+                while self.running:
+                    await asyncio.sleep(1)
             
         except Exception as e:
-            logger.error("Indexer service error", error=str(e))
+            logger.error("❌ Simplified indexer service error", error=str(e))
             raise
     
     async def stop(self):
-        """Stop the indexer service."""
-        logger.info("Stopping indexer service")
+        """Stop the simplified indexer service."""
+        logger.info("⏹️ Stopping simplified indexer service")
         
         self.running = False
         
@@ -98,17 +98,14 @@ class IndexerMain:
         if self.tasks:
             await asyncio.gather(*self.tasks, return_exceptions=True)
         
-        # Stop indexers
-        if self.event_indexer:
-            await self.event_indexer.stop()
+        # Stop simple notifier
+        if self.simple_notifier:
+            await self.simple_notifier.stop()
         
-        if self.transaction_indexer:
-            await self.transaction_indexer.stop()
-        
-        logger.info("Indexer service stopped")
+        logger.info("✅ Simplified indexer service stopped")
     
     async def _periodic_health_check(self):
-        """Periodic health check for indexer components."""
+        """Periodic health check for simplified indexer."""
         while self.running:
             try:
                 await asyncio.sleep(300)  # 5 minutes
@@ -116,29 +113,26 @@ class IndexerMain:
                 if not self.running:
                     break
                 
-                # Check indexer health
-                event_health = await self.event_indexer.health_check()
-                transaction_health = await self.transaction_indexer.health_check()
+                # Check simple notifier health
+                status = await self.simple_notifier.get_status()
                 
                 logger.info(
-                    "Indexer health check",
-                    event_indexer=event_health,
-                    transaction_indexer=transaction_health
+                    "📊 Simplified indexer health check",
+                    status=status
                 )
                 
-                # Restart components if needed
-                if not event_health["healthy"]:
-                    logger.warning("Restarting event indexer due to health check failure")
-                    await self.event_indexer.restart()
+                # Log any issues
+                if status.get("errors_encountered", 0) > 0:
+                    logger.warning(f"⚠️ Errors encountered: {status.get('errors_encountered')}")
                 
-                if not transaction_health["healthy"]:
-                    logger.warning("Restarting transaction indexer due to health check failure")
-                    await self.transaction_indexer.restart()
+                # Log WebSocket connection status
+                connection_count = status.get("websocket_connections", 0)
+                logger.info(f"🔗 Active WebSocket connections: {connection_count}")
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("Health check error", error=str(e))
+                logger.error("❌ Health check error", error=str(e))
 
 
 async def main():

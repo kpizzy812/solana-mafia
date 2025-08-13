@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from .cache_service import get_cache_service
 from .cache_keys import get_cache_key_builder
-from .business_cache import get_business_cache_manager, get_nft_cache_manager
+from .business_cache import get_business_cache_manager
 from .stats_cache import get_stats_cache_manager
 
 import structlog
@@ -86,7 +86,7 @@ class CacheWarmingManager:
         self.cache_service = await get_cache_service()
         self.key_builder = get_cache_key_builder()
         self.business_cache = await get_business_cache_manager()
-        self.nft_cache = await get_nft_cache_manager()
+        # self.nft_cache = await get_nft_cache_manager()  # NFT functionality removed
         self.stats_cache = await get_stats_cache_manager()
         
         # Register default warming tasks

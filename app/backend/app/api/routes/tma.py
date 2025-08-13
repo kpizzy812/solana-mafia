@@ -215,10 +215,13 @@ async def link_wallet_to_tma(
     db: AsyncSession = Depends(get_database)
 ):
     """
-    Link a Solana wallet to TMA account.
+    Link a Solana wallet to TMA account with signature verification.
     """
+    from app.utils.wallet_verification import verify_linking_signature
+    
     tma_data = auth_data['tma_data']
     user_id = f"tg_{tma_data['telegram_user_id']}"
+    telegram_user_id = tma_data['telegram_user_id']
     
     referral_service = ReferralService(db)
     user = await referral_service._get_user_by_id(user_id)
@@ -229,16 +232,44 @@ async def link_wallet_to_tma(
             detail="User not found"
         )
     
-    # TODO: Verify wallet signature
-    # For now, just link the wallet
+    # Verify wallet signature
+    verification_result = verify_linking_signature(
+        wallet_address=request.wallet_address,
+        signature=request.signature,
+        message=request.message,
+        telegram_user_id=telegram_user_id
+    )
+    
+    if not verification_result["valid"]:
+        logger.warning(
+            "Wallet linking signature verification failed",
+            user_id=user_id,
+            wallet_address=request.wallet_address,
+            error=verification_result.get("error")
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Signature verification failed: {verification_result.get('error', 'Invalid signature')}"
+        )
+    
+    # Check if wallet is already linked to another account
+    existing_user = await referral_service._get_user_by_wallet(request.wallet_address)
+    if existing_user and existing_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Wallet is already linked to another account"
+        )
+    
+    # Link the wallet
     user.link_wallet(request.wallet_address)
     
     await db.commit()
     
     logger.info(
-        "Wallet linked to TMA account",
+        "Wallet linked to TMA account successfully",
         user_id=user_id,
-        wallet_address=request.wallet_address
+        wallet_address=request.wallet_address,
+        telegram_user_id=telegram_user_id
     )
     
     return BaseResponse(
@@ -336,19 +367,110 @@ async def get_tma_game_stats(
     """
     Get TMA-specific game statistics.
     """
-    # TODO: Implement actual stats queries
-    # For now, return mock data
+    from sqlalchemy import func, and_
+    from datetime import datetime, timedelta
+    from app.models.user import User, UserType
+    from app.models.referral import ReferralRelation, ReferralStats, ReferralCommission
     
-    return TMAGameStatsResponse(
-        success=True,
-        message="Game statistics retrieved",
-        telegram_players=1000,
-        wallet_players=500,
-        linked_accounts=200,
-        total_referrals=5000,
-        active_referral_chains=300,
-        referral_earnings_distributed=1000000000,  # 1 SOL in lamports
-        daily_active_tma_users=100,
-        weekly_active_tma_users=500,
-        monthly_active_tma_users=1000
-    )
+    try:
+        # Calculate date ranges
+        now = datetime.utcnow()
+        day_ago = now - timedelta(days=1)
+        week_ago = now - timedelta(weeks=1)
+        month_ago = now - timedelta(days=30)
+        
+        # Count telegram players
+        telegram_players_result = await db.execute(
+            select(func.count(User.id)).where(User.user_type == UserType.TELEGRAM)
+        )
+        telegram_players = telegram_players_result.scalar() or 0
+        
+        # Count wallet players
+        wallet_players_result = await db.execute(
+            select(func.count(User.id)).where(User.user_type == UserType.WALLET)
+        )
+        wallet_players = wallet_players_result.scalar() or 0
+        
+        # Count linked accounts (Telegram users with wallets)
+        linked_accounts_result = await db.execute(
+            select(func.count(User.id)).where(
+                and_(
+                    User.user_type == UserType.TELEGRAM,
+                    User.is_linked == True,
+                    User.wallet_address.isnot(None)
+                )
+            )
+        )
+        linked_accounts = linked_accounts_result.scalar() or 0
+        
+        # Count total referrals
+        total_referrals_result = await db.execute(
+            select(func.count(ReferralRelation.id))
+        )
+        total_referrals = total_referrals_result.scalar() or 0
+        
+        # Count active referral chains (users with at least one referral)
+        active_chains_result = await db.execute(
+            select(func.count(func.distinct(ReferralRelation.referrer_id)))
+        )
+        active_referral_chains = active_chains_result.scalar() or 0
+        
+        # Calculate total referral earnings distributed
+        total_earnings_result = await db.execute(
+            select(func.sum(ReferralCommission.commission_amount)).where(
+                ReferralCommission.status == "paid"
+            )
+        )
+        referral_earnings_distributed = total_earnings_result.scalar() or 0
+        
+        # Calculate active users (based on last activity)
+        daily_active_result = await db.execute(
+            select(func.count(User.id)).where(
+                and_(
+                    User.user_type == UserType.TELEGRAM,
+                    User.last_activity_at >= day_ago
+                )
+            )
+        )
+        daily_active_tma_users = daily_active_result.scalar() or 0
+        
+        weekly_active_result = await db.execute(
+            select(func.count(User.id)).where(
+                and_(
+                    User.user_type == UserType.TELEGRAM,
+                    User.last_activity_at >= week_ago
+                )
+            )
+        )
+        weekly_active_tma_users = weekly_active_result.scalar() or 0
+        
+        monthly_active_result = await db.execute(
+            select(func.count(User.id)).where(
+                and_(
+                    User.user_type == UserType.TELEGRAM,
+                    User.last_activity_at >= month_ago
+                )
+            )
+        )
+        monthly_active_tma_users = monthly_active_result.scalar() or 0
+        
+        return TMAGameStatsResponse(
+            success=True,
+            message="Game statistics retrieved",
+            telegram_players=telegram_players,
+            wallet_players=wallet_players,
+            linked_accounts=linked_accounts,
+            total_referrals=total_referrals,
+            active_referral_chains=active_referral_chains,
+            referral_earnings_distributed=referral_earnings_distributed,
+            daily_active_tma_users=daily_active_tma_users,
+            weekly_active_tma_users=weekly_active_tma_users,
+            monthly_active_tma_users=monthly_active_tma_users
+        )
+        
+    except Exception as e:
+        logger.error("Failed to get TMA game stats", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve game statistics"
+        )

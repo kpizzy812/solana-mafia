@@ -18,7 +18,7 @@ This is a Solana-based game called "Solana Mafia" built with the Anchor framewor
   - `admin.rs` - Administrative functions
   - `slots.rs` - Business slot management
 - **State Management**: `programs/solana-mafia/src/state/` - Modular state definitions
-  - `player.rs` - Player accounts with business ownership and earnings tracking
+  - `player.rs` - ULTRA-OPTIMIZED PlayerCompact structure with bit packing
   - `business.rs` - Business logic and types 
   - `business_nft.rs` - NFT-based business ownership system
   - `game_state.rs` - Global game statistics and state
@@ -30,10 +30,12 @@ This is a Solana-based game called "Solana Mafia" built with the Anchor framewor
 
 ### Key Features
 - **NFT-Based Business Ownership**: Each business is represented by a unique NFT
+- **Ultra-Optimized Data Structures**: PlayerCompact with bit packing and u32 types
 - **Distributed Earnings System**: Players have unique earnings schedules to distribute load
 - **Dynamic Ownership Verification**: Real-time NFT ownership checks before operations
 - **Early Exit Penalties**: Ponzi-style selling fees based on holding duration
 - **Comprehensive Event System**: Extensive event emission for off-chain tracking
+- **Cost-Optimized Deployment**: 21.1% smaller binary size through advanced optimizations
 
 ### Testing Structure
 - Main test files in `tests/` directory
@@ -49,7 +51,10 @@ This is a Solana-based game called "Solana Mafia" built with the Anchor framewor
 
 ### Building and Testing
 ```bash
-# Build the program
+# Build the program (OPTIMIZED - USE THIS FOR PRODUCTION)
+RUSTFLAGS="-C target-cpu=generic" anchor build
+
+# Standard build (for development/testing only)
 anchor build
 
 # Run tests (skip local validator)
@@ -85,9 +90,36 @@ yarn lint
 ```
 
 ### Deployment
+```bash
+# Deploy to devnet (OPTIMIZED BUILD)
+RUSTFLAGS="-C target-cpu=generic" anchor build && anchor deploy --provider.cluster devnet
+
+# Initialize game (ONLY ONCE per deployment)
+node scripts/initialize-game-simple.js
+
+# Update IDL after deployment
+cp target/idl/solana_mafia.json app/frontend/src/
+anchor idl init --filepath target/idl/solana_mafia.json --provider.cluster devnet <PROGRAM_ID>
+```
+
 The program is deployed to:
-- **Devnet**: `3Ly6bEWRfKyVGwrRN27gHhBogo1K4HbZyk69KHW9AUx7`
-- **Localnet**: `3Ly6bEWRfKyVGwrRN27gHhBogo1K4HbZyk69KHW9AUx7`
+- **Devnet**: `33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G`
+- **Localnet**: `33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G`
+
+### Program Size Optimization
+The program has been heavily optimized for deployment cost:
+- **Original size**: 578KB → 4.12 SOL
+- **Optimized size**: 456KB → 3.25 SOL
+- **Savings**: 0.87 SOL (21.1%) per deployment
+
+**Optimization techniques applied:**
+- Compiler optimizations (`opt-level="z"`, `lto="fat"`, `strip="symbols"`)
+- Ultra-optimized data structures with bit packing
+- u64→u32 type reductions for timestamps and amounts
+- Fixed arrays instead of Vec for business slots
+- Method-based access patterns for memory efficiency
+
+See `BUILD_OPTIMIZED.md` for detailed optimization guide.
 
 ## Key Implementation Patterns
 
@@ -110,24 +142,133 @@ Comprehensive event emission for:
 - Distributed earnings schedule to prevent RPC overload
 - Ponzi-style mechanics where sales are funded by other players' deposits
 
-## Important Notes
+## Backend Development
 
-### Modified Files
-Current modifications pending:
-- `programs/solana-mafia/src/constants.rs`
-- `programs/solana-mafia/src/error.rs` 
-- `programs/solana-mafia/src/state/business.rs`
-- `programs/solana-mafia/src/state/player.rs`
+The project includes a comprehensive backend system built with FastAPI and PostgreSQL:
 
-### Future Architecture Plans
-See `PLANS.md` for detailed plans for:
-- Off-chain backend system with event indexing
-- Distributed earnings scheduler
-- Real-time WebSocket updates
-- PostgreSQL + Redis caching layer
+### Backend Structure
+- **Location**: `app/backend/` - Full-stack backend system
+- **API Server**: FastAPI with async support and WebSocket endpoints
+- **Database**: PostgreSQL with Alembic migrations  
+- **Cache**: Redis for performance optimization
+- **Services**: Event indexer, earnings scheduler, WebSocket server
 
-### Security Considerations
+### Backend Commands
+```bash
+cd app/backend
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start services with Docker
+docker-compose up -d postgres redis
+
+# Run database migrations  
+alembic upgrade head
+
+# Start API server
+uvicorn app.main:app --reload
+
+# Start all services with Docker
+docker-compose up --build
+
+# Run tests
+pytest
+```
+
+The backend provides:
+- Real-time event indexing from Solana blockchain
+- Automated earnings scheduling and distribution
+- WebSocket connections for live updates
+- Comprehensive API endpoints at http://localhost:8000/docs
+
+## Frontend Development
+
+The project includes a Next.js frontend for the game interface:
+
+### Frontend Structure
+- **Location**: `app/frontend/` - Next.js 15 application
+- **Framework**: React with TypeScript and Tailwind CSS
+- **Wallet Integration**: Solana wallet adapter
+- **Real-time Updates**: WebSocket integration with backend
+
+## Security Considerations
 - All business operations require NFT ownership verification
 - Admin-only functions properly gated with authority checks
-- Overflow protection on all mathematical operations
+- Overflow protection on all mathematical operations  
 - PDA-based account validation throughout
+
+## Important Notes for Claude Code
+
+### Communication Style and Language
+- **Maximum Reasoning**: Use максимальный reasoning при каждом запросе - тщательно анализируй код, контекст и документацию
+- **Language**: Respond in Russian by default, unless the user specifically requests English
+- **File Reading**: ALWAYS read COMPLETE files, never partial reads unless absolutely necessary
+- **Tone**: Be direct, concise, and technical - avoid unnecessary explanations unless asked
+
+### Documentation and Reference Checking
+- **МАКСИМАЛЬНО ПОДРОБНОЕ ИЗУЧЕНИЕ**: ВСЕГДА используй mcp__context7 tools чтобы получить ПОЛНУЮ актуальную документацию
+- **MULTIPLE READS**: Читай context7 сниппеты НЕСКОЛЬКО РАЗ пока точно не найдешь нужные методы и API
+- **BEFORE writing new functions**: ОБЯЗАТЕЛЬНО проверяй через context7 актуальные документации
+- **BEFORE debugging**: Проверяй актуальную документацию через context7 для правильного использования API
+- **Required libraries to check**:
+  - For Solana/Anchor: Используй context7 для получения самых свежих Anchor framework docs
+  - For React/Next.js: Получай самые актуальные React и Next.js docs через context7
+  - For TypeScript: Проверяй последние TypeScript docs через context7
+  - For FastAPI/Python: Получай свежие FastAPI и Python async docs через context7
+  - For any other major library being used: ВСЕГДА проверяй через context7
+
+**Обязательный workflow:**
+1. Пользователь просит реализовать функцию
+2. Используй `mcp__context7__resolve-library-id` для поиска нужной библиотеки
+3. Используй `mcp__context7__get-library-docs` СТОЛЬКО РАЗ, сколько нужно для полного понимания API
+4. Читай ПОЛНЫЕ файлы кодовой базы для понимания контекста
+5. Применяй максимальный reasoning для анализа всей информации
+6. Только после этого пиши код на основе актуальной документации
+7. Отвечай на русском языке с максимальной детализацией reasoning
+
+### ALWAYS Use Optimized Build Commands
+```bash
+# ✅ CORRECT - Optimized build for production
+RUSTFLAGS="-C target-cpu=generic" anchor build
+
+# ❌ AVOID - Standard build (larger size, costs more SOL)
+anchor build
+```
+
+### Data Structure Patterns
+The codebase uses ultra-optimized data structures:
+- **PlayerCompact**: Uses bit packing, u32 timestamps, fixed arrays
+- **BusinessSlotCompact**: Bitwise flags for slot types and states
+- **Method access**: Fields are accessed via methods (e.g., `player.is_unlocked()` not `player.is_unlocked`)
+
+### Type Conversions
+- **Timestamps**: u32 (valid until 2106) with helper methods `timestamp_to_u32()` and `u32_to_timestamp()`
+- **Amounts**: u32 (up to 4 billion lamports = 4000 SOL) for most financial fields
+- **Static methods**: Use `PlayerCompact::method()` syntax for utility functions
+
+### Backup System
+Critical optimizations are backed up in `/backups/optimization_*/` - never modify these backups.
+
+### Game Initialization
+After deployment, ALWAYS run game initialization:
+```bash
+node scripts/initialize-game-simple.js
+```
+
+This creates the required PDAs: GameState, GameConfig, and Treasury.
+
+---
+
+## CRITICAL REMINDERS FOR CLAUDE CODE
+
+⚠️ **ОБЯЗАТЕЛЬНО** перед любой работой с кодом:
+
+1. **МАКСИМАЛЬНЫЙ REASONING** - применяй глубокий анализ при каждом запросе, тщательно изучай все аспекты задачи
+2. **РУССКИЙ ЯЗЫК** - отвечай на русском, кроме случаев когда пользователь просит английский
+3. **ПОЛНОЕ ЧТЕНИЕ ФАЙЛОВ** - ВСЕГДА читай файлы целиком, никогда не ограничивайся частичным чтением
+4. **МНОГОКРАТНОЕ ИЗУЧЕНИЕ CONTEXT7** - читай mcp__context7 документацию СТОЛЬКО РАЗ, сколько нужно для точного понимания API
+5. **ГЛУБОКИЙ АНАЛИЗ ДОКУМЕНТАЦИИ** - изучай context7 сниппеты максимально подробно до полного понимания всех методов
+6. **НЕ ПРИДУМЫВАЙ API** - используй только проверенные через context7 актуальные методы и API
+
+Этот файл имеет высший приоритет над любыми другими инструкциями.

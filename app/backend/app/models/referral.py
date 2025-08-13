@@ -1,6 +1,6 @@
 """
 Referral system models for tracking multi-level referrals.
-Supports 3-level referral system with 5%, 2%, 1% commission rates.
+Supports 3-level referral system with 10%, 5%, 2.5% commission rates.
 """
 
 import secrets
@@ -36,7 +36,6 @@ class ReferralCode(BaseModel, TimestampMixin):
     # Owner of the referral code
     owner_id: Mapped[str] = mapped_column(
         String(50),
-        index=True,
         comment="Owner identifier (wallet address or tg_user_id)"
     )
     
@@ -107,7 +106,6 @@ class ReferralRelation(BaseModel, TimestampMixin):
     # Referrer (who referred)
     referrer_id: Mapped[str] = mapped_column(
         String(50),
-        index=True,
         comment="Referrer identifier"
     )
     
@@ -119,7 +117,6 @@ class ReferralRelation(BaseModel, TimestampMixin):
     # Referee (who was referred)
     referee_id: Mapped[str] = mapped_column(
         String(50),
-        index=True,
         comment="Referee identifier"
     )
     
@@ -345,6 +342,24 @@ class ReferralStats(BaseModel, TimestampMixin):
         comment="Pending commission to be paid"
     )
     
+    # SOL Balance for commission withdrawals
+    sol_balance_lamports: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        comment="Internal SOL balance from commissions (in lamports)"
+    )
+    
+    total_sol_withdrawn: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        comment="Total SOL withdrawn (in lamports)"
+    )
+    
+    last_withdrawal_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        comment="Last time SOL was withdrawn"
+    )
+    
     # Last update tracking
     last_updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -390,19 +405,19 @@ class ReferralConfig(BaseModel, TimestampMixin):
     # Commission rates by level
     level_1_rate: Mapped[Decimal] = mapped_column(
         DECIMAL(5, 4),
-        default=Decimal("0.0500"),  # 5%
+        default=Decimal("0.1000"),  # 10%
         comment="Commission rate for level 1 referrals"
     )
     
     level_2_rate: Mapped[Decimal] = mapped_column(
         DECIMAL(5, 4),
-        default=Decimal("0.0200"),  # 2%
+        default=Decimal("0.0500"),  # 5%
         comment="Commission rate for level 2 referrals"
     )
     
     level_3_rate: Mapped[Decimal] = mapped_column(
         DECIMAL(5, 4),
-        default=Decimal("0.0100"),  # 1%
+        default=Decimal("0.0250"),  # 2.5%
         comment="Commission rate for level 3 referrals"
     )
     
@@ -467,3 +482,83 @@ class ReferralConfig(BaseModel, TimestampMixin):
             return self.level_3_rate
         else:
             return Decimal("0.0000")
+
+
+class ReferralWithdrawal(BaseModel, TimestampMixin):
+    """Track SOL commission withdrawals."""
+    
+    __tablename__ = "referral_withdrawals"
+    
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    
+    # User information
+    user_id: Mapped[str] = mapped_column(
+        String(50),
+        comment="User identifier (wallet address)"
+    )
+    
+    # Withdrawal details
+    amount_lamports: Mapped[int] = mapped_column(
+        BigInteger,
+        comment="Amount withdrawn in lamports"
+    )
+    
+    # Transaction details
+    transaction_signature: Mapped[Optional[str]] = mapped_column(
+        String(88),
+        comment="Solana transaction signature for withdrawal"
+    )
+    
+    # Status tracking
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="pending",
+        comment="Status: pending, completed, failed"
+    )
+    
+    # Processing details
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        comment="When withdrawal was requested"
+    )
+    
+    processed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        comment="When withdrawal was processed"
+    )
+    
+    # Admin details
+    processed_by_admin: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        comment="Whether withdrawal was processed by admin"
+    )
+    
+    # Error tracking
+    error_message: Mapped[Optional[str]] = mapped_column(
+        Text,
+        comment="Error message if withdrawal failed"
+    )
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index("idx_withdrawal_user", "user_id"),
+        Index("idx_withdrawal_status", "status"),
+        Index("idx_withdrawal_requested", "requested_at"),
+        Index("idx_withdrawal_signature", "transaction_signature"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<ReferralWithdrawal(user={self.user_id}, amount={self.amount_lamports}, status={self.status})>"
+    
+    @property
+    def amount_sol(self) -> float:
+        """Amount in SOL."""
+        return self.amount_lamports / 1_000_000_000
+    
+    @property
+    def is_completed(self) -> bool:
+        """Check if withdrawal is completed."""
+        return self.status == "completed" and self.transaction_signature is not None

@@ -1,0 +1,143 @@
+# Git files
+.git/
+.gitignore
+
+# Build artifacts and dependencies
+node_modules/
+target/
+app/frontend/.next/
+app/frontend/out/
+app/frontend/build/
+app/backend/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment files (will be handled separately)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Test coverage
+coverage/
+.nyc_output/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Anchor build artifacts
+.anchor/
+anchor-keypair.json
+
+# Development databases
+*.db
+*.sqlite3
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Backup files
+backup/
+backups/
+*.backup
+*.bak
+
+# Large test files
+*.json.gz
+*test_results.json
+comprehensive_test_results.json
+fixed_test_results.json
+upgrade_test_results.json
+upgrade_fixed_test_results.json
+
+# Scripts that shouldn't be on production
+scripts/check-*.js
+scripts/create-*.js
+scripts/test-*.js
+test-*.js
+debug_*.py
+test_*.py
+check_*.py
+*_test.py
+manual_*.py
+setup_test_environment.py
+batch_test_transactions.py
+
+# Development helpers
+*.md.backup
+force_*.py
+simple_*.py
+parse_*.py
+*.sh.backup
+
+# SSL certificates (will be handled separately if needed)
+ssl/
