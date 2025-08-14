@@ -368,7 +368,7 @@ export default function Home() {
         slotIndex,
       });
 
-      const result = await sellBusiness(wallet, businessId, slotIndex);
+      const result = await sellBusiness(wallet, slotIndex);
       
       toast.success(`Business sold! Transaction: ${result.signature.slice(0, 8)}...`, { id: 'sell' });
       

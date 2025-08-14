@@ -1,5 +1,5 @@
 {
-  "address": "33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G",
+  "address": "GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU",
   "metadata": {
     "name": "solana_mafia",
     "version": "0.1.0",
@@ -907,6 +907,10 @@
               }
             ]
           }
+        },
+        {
+          "name": "treasury_wallet",
+          "writable": true
         },
         {
           "name": "system_program",

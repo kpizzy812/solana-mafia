@@ -6,7 +6,7 @@ import React from 'react';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { useTranslation } from '@/locales';
 import { cn } from '../../../lib/utils';
-import { formatBalance } from '../../utils/formatters';
+import { formatEarningsBalance } from '../../utils/formatters';
 import { lamportsToSOL } from '../../../lib/api';
 import { PlayerStats } from '../../types';
 
@@ -42,7 +42,7 @@ export const EarningsBalance: React.FC<EarningsBalanceProps> = ({
             <div>
               <div className="text-sm font-medium text-muted-foreground">{t.earningsBalance}</div>
               <div className="text-xl font-bold text-card-foreground">
-                {formatBalance(lamportsToSOL(playerStats.earningsBalance))} SOL
+                {formatEarningsBalance(lamportsToSOL(playerStats.earningsBalance))} SOL
               </div>
             </div>
           </div>

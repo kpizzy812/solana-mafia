@@ -37,38 +37,14 @@ pub fn create_business(
             entry_fee,
         )?;
         
-        // 🚨 КРИТИЧЕСКИЙ FIX: Устанавливаем owner и bump
-        player.owner = ctx.accounts.owner.key();
-        player.bump = ctx.bumps.player;
+        // 🚨 ИСПРАВЛЕНО: Используем правильную инициализацию PlayerCompact::new()
+        **player = PlayerCompact::new(
+            ctx.accounts.owner.key(),
+            ctx.bumps.player,
+            clock.unix_timestamp
+        );
         
-        // 🏪 НОВОЕ: Инициализируем все 9 слотов разблокированными
-        let mut slots = [BusinessSlotCompact::new_basic_free(); 9];
-        
-        // Слоты 0-2: Basic бесплатные (уже оплачены)
-        for i in 0..3 {
-            slots[i] = BusinessSlotCompact::new_basic_free();
-        }
-        
-        // Слоты 3-5: Basic платные (10% при первом использовании)
-        for i in 3..6 {
-            slots[i] = BusinessSlotCompact::new_basic_paid();
-        }
-        
-        // Слоты 6-8: Premium/VIP/Legendary (неоплаченные)
-        slots[6] = BusinessSlotCompact::new_premium_unpaid(SlotType::Premium);
-        slots[7] = BusinessSlotCompact::new_premium_unpaid(SlotType::VIP);
-        slots[8] = BusinessSlotCompact::new_premium_unpaid(SlotType::Legendary);
-        
-        player.business_slots = slots;
-        player.unlocked_slots_count = 9; // Все 9 слотов разблокированы
-        player.premium_slots_count = 3; // 3 premium слота доступны
-        player.flags = 0;
-        player.created_at = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
-        player.next_earnings_time = PlayerCompact::timestamp_to_u32(clock.unix_timestamp + EARNINGS_INTERVAL);
-        player.earnings_interval = EARNINGS_INTERVAL as u32;
-        player.last_auto_update = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
-        
-        // Устанавливаем has_paid_entry как в create_player
+        // Устанавливаем has_paid_entry=true так как entry fee оплачен
         player.set_has_paid_entry(true);
         
         // Обновляем game_state как в create_player
@@ -322,9 +298,10 @@ pub fn sell_business(
         .checked_sub(sell_fee)
         .ok_or(SolanaMafiaError::MathOverflow)?;
 
-    // Return funds to player from treasury PDA via CPI
-    ctx.accounts.treasury_pda.sub_lamports(return_amount)?;
-    ctx.accounts.player_owner.add_lamports(return_amount)?;
+    // Return funds to player from treasury PDA using manual lamports manipulation
+    // (System Program can't transfer from accounts with data, so we do it manually)
+    **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
+    **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
 
     // Update statistics
     game_state.add_withdrawal(return_amount);
@@ -382,29 +359,14 @@ pub fn create_business_with_level(
             entry_fee,
         )?;
         
-        // Инициализируем игрока (такой же код как в create_business)
-        player.owner = ctx.accounts.owner.key();
-        player.bump = ctx.bumps.player;
+        // 🚨 ИСПРАВЛЕНО: Используем правильную инициализацию PlayerCompact::new()
+        **player = PlayerCompact::new(
+            ctx.accounts.owner.key(),
+            ctx.bumps.player,
+            clock.unix_timestamp
+        );
         
-        let mut slots = [BusinessSlotCompact::new_basic_free(); 9];
-        for i in 0..3 {
-            slots[i] = BusinessSlotCompact::new_basic_free();
-        }
-        for i in 3..6 {
-            slots[i] = BusinessSlotCompact::new_basic_paid();
-        }
-        slots[6] = BusinessSlotCompact::new_premium_unpaid(SlotType::Premium);
-        slots[7] = BusinessSlotCompact::new_premium_unpaid(SlotType::VIP);
-        slots[8] = BusinessSlotCompact::new_premium_unpaid(SlotType::Legendary);
-        
-        player.business_slots = slots;
-        player.unlocked_slots_count = 9;
-        player.premium_slots_count = 3;
-        player.flags = 0;
-        player.created_at = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
-        player.next_earnings_time = PlayerCompact::timestamp_to_u32(clock.unix_timestamp + EARNINGS_INTERVAL);
-        player.earnings_interval = EARNINGS_INTERVAL as u32;
-        player.last_auto_update = PlayerCompact::timestamp_to_u32(clock.unix_timestamp);
+        // Устанавливаем has_paid_entry=true так как entry fee оплачен
         player.set_has_paid_entry(true);
         
         game_state.add_player();

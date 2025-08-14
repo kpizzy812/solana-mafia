@@ -7,7 +7,6 @@ pub mod state;
 
 use state::*;
 use constants::*;
-use error::SolanaMafiaError;
 
 // ============ EVENTS ============
 #[event]
@@ -126,7 +125,7 @@ pub struct GlobalStats {
     pub total_treasury_collected: u64,
 }
 
-declare_id!("33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G");
+declare_id!("GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU");
 
 #[program]
 pub mod solana_mafia {
@@ -496,27 +495,34 @@ pub struct SellBusinessFromSlot<'info> {
         bump = player.bump,
         constraint = player.owner == player_owner.key()
     )]
-    pub player: Account<'info, Player>,
+    pub player: Box<Account<'info, Player>>,
     
     #[account(
         mut,
         seeds = [TREASURY_SEED],
         bump = treasury_pda.bump
     )]
-    pub treasury_pda: Account<'info, Treasury>,
+    pub treasury_pda: Box<Account<'info, Treasury>>,
     
     #[account(
         mut,
         seeds = [GAME_STATE_SEED],
         bump = game_state.bump
     )]
-    pub game_state: Account<'info, GameState>,
+    pub game_state: Box<Account<'info, GameState>>,
 
     #[account(
         seeds = [GAME_CONFIG_SEED],
         bump = game_config.bump
     )]
-    pub game_config: Account<'info, GameConfig>,
+    pub game_config: Box<Account<'info, GameConfig>>,
+
+    /// CHECK: Treasury wallet for simulation visibility in Phantom
+    #[account(
+        mut,
+        address = game_state.treasury_wallet
+    )]
+    pub treasury_wallet: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
 }

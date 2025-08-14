@@ -169,6 +169,41 @@ class ApiClient {
     return this.request(`/earnings/${wallet}`);
   }
 
+  // Quest endpoints
+  async getPlayerQuests(wallet: string): Promise<ApiResponse<any>> {
+    return this.request(`/quests/players/${wallet}`);
+  }
+
+  async startQuest(questId: number, playerWallet: string): Promise<ApiResponse<any>> {
+    return this.request(`/quests/start`, {
+      method: 'POST',
+      body: JSON.stringify({
+        quest_id: questId,
+        player_wallet: playerWallet
+      })
+    });
+  }
+
+  async updateQuestProgress(questId: number, playerWallet: string, progressValue: number): Promise<ApiResponse<any>> {
+    const params = new URLSearchParams({
+      player_wallet: playerWallet,
+      progress_value: progressValue.toString()
+    });
+    
+    return this.request(`/quests/${questId}/progress?${params}`, {
+      method: 'PUT'
+    });
+  }
+
+  async claimQuestReward(questId: number, playerWallet: string): Promise<ApiResponse<any>> {
+    return this.request(`/quests/${questId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({
+        player_wallet: playerWallet
+      })
+    });
+  }
+
   // Set authorization header for wallet-based auth
   setWalletAuth(walletAddress: string) {
     this.headers = {
@@ -237,7 +272,9 @@ export const apiClient = new ApiClient();
 
 // Utility functions
 export const formatSOL = (amount: number): string => {
-  return `${amount.toFixed(3)} SOL`;
+  // Convert lamports to SOL first, then format
+  const solAmount = lamportsToSOL(amount);
+  return `${solAmount.toFixed(4)} SOL`;
 };
 
 export const formatNumber = (num: number): string => {
@@ -246,10 +283,10 @@ export const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export const calculateDailyYield = (earningsPerHour: number, businessPrice: number): number => {
+export const calculateDailyYield = (earningsPerDay: number, businessPrice: number): number => {
   if (businessPrice === 0) return 0;
-  const dailyEarnings = earningsPerHour * 24;
-  return (dailyEarnings / businessPrice) * 100;
+  // Note: earningsPerDay is already daily earnings, not hourly (despite the parameter name in backend)
+  return (earningsPerDay / businessPrice) * 100;
 };
 
 // Convert lamports to SOL

@@ -720,16 +720,14 @@ export const useAppLogic = (wallet: any, connected: boolean, publicKey: any) => 
 
     try {
       console.log('🚀 NEW ARCHITECTURE: Starting enhanced business sell', {
-        businessId,
         slotIndex,
         userWallet: publicKey.toString()
       });
 
       // Use new signature processing architecture
       const result = await sellBusinessWithProcessing(
-        sellBusiness,  // Original sell function (already takes wallet, bId, sIndex)
+        sellBusiness,  // Original sell function (now only takes wallet, slotIndex)
         wallet,  // 🔧 FIX: Pass wallet object
-        businessId,
         slotIndex,
         publicKey.toString(),
         (status, data) => {

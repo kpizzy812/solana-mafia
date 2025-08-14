@@ -1,4 +1,4 @@
-version: '3.8'
+# Removed version (deprecated in newer Docker Compose)
 
 services:
   # PostgreSQL Database
@@ -52,7 +52,7 @@ services:
       PORT: 8000
       SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
       SOLANA_WS_URL: wss://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
-      SOLANA_PROGRAM_ID: 33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G
+      SOLANA_PROGRAM_ID: GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,7 +104,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
       SOLANA_WS_URL: wss://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
-      SOLANA_PROGRAM_ID: 33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G
+      SOLANA_PROGRAM_ID: GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,7 +131,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
       SOLANA_WS_URL: wss://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
-      SOLANA_PROGRAM_ID: 33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G
+      SOLANA_PROGRAM_ID: GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,7 +162,7 @@ services:
       WEBSOCKET_PORT: 8001
       SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
       SOLANA_WS_URL: wss://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
-      SOLANA_PROGRAM_ID: 33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G
+      SOLANA_PROGRAM_ID: GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU
     depends_on:
       redis:
         condition: service_healthy
@@ -187,7 +187,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
       SOLANA_WS_URL: wss://devnet.helius-rpc.com/?api-key=0ecf20d9-719d-4946-be7e-be9b29cf8bca
-      SOLANA_PROGRAM_ID: 33FDNiVG3H3qNZYbQJbHVXeJG4n5ZfHL8bXuTieifQ3G
+      SOLANA_PROGRAM_ID: GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU
     depends_on:
       postgres:
         condition: service_healthy

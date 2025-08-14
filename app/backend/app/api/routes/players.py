@@ -64,11 +64,87 @@ router = APIRouter()
     description="Retrieve player profile information by wallet address"
 )
 async def get_player_profile(
-    player: Player = Depends(get_player_by_wallet),
+    wallet: str = Depends(validate_wallet_param),
+    player: Optional[Player] = Depends(get_player_by_wallet_optional),
     db: AsyncSession = Depends(get_database)
 ):
     """Get player profile by wallet address."""
     try:
+        if not player:
+            # Check if User exists (wallet connected but no businesses yet)
+            from app.models.user import User
+            user_result = await db.execute(
+                select(User).where(User.wallet_address == wallet)
+            )
+            user = user_result.scalar_one_or_none()
+            
+            if user:
+                # Return profile for connected user with no businesses yet
+                user_profile_data = {
+                    "wallet": wallet,
+                    "total_invested": 0,
+                    "total_earned": 0,
+                    "pending_earnings": 0,
+                    "is_active": True,  # User exists, just no businesses
+                    "unlocked_slots_count": 9,  # Default slots available
+                    "premium_slots_count": 0,
+                    "active_businesses_count": 0,
+                    # 💰 NEW: Enhanced net profit calculation
+                    "net_profit_old": 0,  # Legacy: only claimed earnings
+                    "net_profit": 0,      # New: includes liquidation + pending
+                    "liquidation_value": 0,  # Current sale value of all businesses
+                    "true_position": 0,   # Alias for frontend clarity
+                    # Prestige information
+                    "prestige_points": 0,
+                    "prestige_level": "wannabe",
+                    "total_prestige_earned": 0,
+                    "prestige_level_up_count": 0,
+                    "points_to_next_level": 50,
+                    "prestige_progress_percentage": 0,
+                    "created_at": user.created_at.isoformat() if user.created_at else None,
+                    "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+                    "has_businesses": False,  # Flag indicating user exists but no businesses
+                }
+                
+                logger.info("User found but no Player record, returning user profile", wallet=wallet)
+                return create_success_response(
+                    data=user_profile_data,
+                    message="User profile retrieved (no businesses yet)"
+                )
+            
+            # No User and no Player - completely new wallet (shouldn't happen after wallet connect)
+            default_player_data = {
+                "wallet": wallet,
+                "total_invested": 0,
+                "total_earned": 0,
+                "pending_earnings": 0,
+                "is_active": False,
+                "unlocked_slots_count": 9,  # Default slots available
+                "premium_slots_count": 0,
+                "active_businesses_count": 0,
+                # 💰 NEW: Enhanced net profit calculation
+                "net_profit_old": 0,  # Legacy: only claimed earnings
+                "net_profit": 0,      # New: includes liquidation + pending
+                "liquidation_value": 0,  # Current sale value of all businesses
+                "true_position": 0,   # Alias for frontend clarity
+                # Prestige information
+                "prestige_points": 0,
+                "prestige_level": "wannabe",
+                "total_prestige_earned": 0,
+                "prestige_level_up_count": 0,
+                "points_to_next_level": 50,
+                "prestige_progress_percentage": 0,
+                "created_at": None,
+                "updated_at": None,
+                "has_businesses": False,  # Flag indicating completely new wallet
+            }
+            
+            logger.info("Neither Player nor User found, returning default profile", wallet=wallet)
+            return create_success_response(
+                data=default_player_data,
+                message="Wallet not connected yet - default profile"
+            )
+        
         # Get active business count
         active_business_count_result = await db.execute(
             select(func.count(Business.id)).where(
@@ -121,12 +197,12 @@ async def get_player_profile(
         )
         
     except Exception as e:
-        logger.error("Error retrieving player profile", wallet=player.wallet, error=str(e))
+        logger.error("Error retrieving player profile", wallet=wallet, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": "PROFILE_RETRIEVAL_ERROR",
-                "message": "Failed to retrieve player profile"
+                "message": f"Failed to retrieve player profile for {wallet}"
             }
         )
 
@@ -1155,10 +1231,25 @@ async def connect_wallet(
             wallet_address=wallet_address
         )
         
-        # Check if this was a new user creation
-        is_new_user = user.created_at and (
-            datetime.utcnow() - user.created_at.replace(tzinfo=None)
-        ).total_seconds() < 60  # Created within last minute
+        # Check if this is a new player (no businesses purchased yet)
+        # A new player = user exists but has no entry in Player table (no businesses)
+        
+        player_result = await db.execute(
+            select(Player).where(Player.wallet == wallet_address)
+        )
+        existing_player = player_result.scalar_one_or_none()
+        
+        # If no Player record exists, this is definitely a new user
+        # If Player exists but has 0 businesses, also consider as new for entry fee display
+        if not existing_player:
+            is_new_user = True
+        else:
+            # Check if player has any businesses (active or inactive)
+            business_count_result = await db.execute(
+                select(func.count(Business.id)).where(Business.player_wallet == wallet_address)
+            )
+            business_count = business_count_result.scalar() or 0
+            is_new_user = business_count == 0
         
         await db.commit()
         

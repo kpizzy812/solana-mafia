@@ -166,7 +166,7 @@ export const BusinessCard: React.FC<BusinessCardProps> = ({
                 +{formatSOL(earning)}
               </span>
               <span className="text-xs text-success font-medium">
-                ({dailyYieldPercent.toFixed(2)}%)
+                ({dailyYieldPercent.toFixed(1)}%)
               </span>
             </div>
           </div>

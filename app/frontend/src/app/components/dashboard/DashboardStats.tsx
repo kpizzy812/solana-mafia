@@ -7,7 +7,7 @@ import { DashboardCard } from '@/components/ui/DashboardCard';
 import { WalletIcon, BuildingIcon, GridIcon } from '@/components/ui/icons';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { lamportsToSOL } from '../../../lib/api';
-import { formatBalance } from '../../utils/formatters';
+import { formatBalance, formatTotalEarnings } from '../../utils/formatters';
 import { useTranslation } from '@/locales';
 import { PlayerStats } from '../../types';
 
@@ -44,7 +44,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         <div className="relative">
           <DashboardCard
             title={t.totalEarnings} 
-            value={`${formatBalance(lamportsToSOL(playerStats.totalEarnings))} SOL`}
+            value={`${formatTotalEarnings(lamportsToSOL(playerStats.totalEarnings))} SOL`}
             icon={<WalletIcon className="w-4 h-4 text-primary" />}
           />
           <div className="absolute -top-1 -right-1">

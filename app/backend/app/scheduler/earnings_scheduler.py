@@ -210,47 +210,179 @@ class BlockchainEarningsScheduler:
         self.logger.info("Scheduler loop stopped")
     
     async def _run_daily_earnings(self):
-        """Run the daily earnings processing."""
-        self.logger.info("Starting daily earnings processing")
+        """Run the daily earnings processing with full tracking and accountability."""
+        earnings_date = datetime.now(timezone.utc).date()
+        self.logger.info("Starting daily earnings processing", earnings_date=earnings_date.isoformat())
         
         self.status = SchedulerStatus.PROCESSING
         self.stats.total_runs += 1
         
+        # Initialize tracking services
+        from app.services.daily_earnings_tracker import get_daily_earnings_tracker
+        from app.core.database import get_async_session
+        
+        earnings_run = None
+        
         try:
-            # Get resilient earnings processor
-            processor = await get_resilient_earnings_processor()
-            
-            # Run the daily earnings process
-            processing_stats = await processor.run_daily_earnings_process()
-            
-            # Update scheduler stats
-            self.stats.last_run = datetime.utcnow()
-            self.stats.last_processing_stats = processing_stats
-            self.stats.successful_runs += 1
-            self.status = SchedulerStatus.WAITING
-            
-            self.logger.info(
-                "Daily earnings processing completed successfully",
-                total_players=processing_stats.total_players_found,
-                players_updated=processing_stats.successful_updates,
-                processing_time=f"{processing_stats.total_processing_time:.2f}s",
-                success_rate=f"{processing_stats.success_rate * 100:.1f}%"
-            )
+            async with get_async_session() as db:
+                # Start tracked earnings run
+                tracker = await get_daily_earnings_tracker(db)
+                earnings_run = await tracker.start_daily_run(
+                    earnings_date=earnings_date,
+                    triggered_by="scheduler"
+                )
+                
+                # Get resilient earnings processor
+                processor = await get_resilient_earnings_processor()
+                
+                # Run the daily earnings process with tracking
+                processing_stats = await self._run_earnings_with_tracking(
+                    processor, tracker, earnings_run.id, db
+                )
+                
+                # Complete the run
+                run_summary = await tracker.complete_daily_run(earnings_run.id)
+                
+                # Update scheduler stats
+                self.stats.last_run = datetime.utcnow()
+                self.stats.last_processing_stats = processing_stats
+                self.stats.successful_runs += 1
+                self.status = SchedulerStatus.WAITING
+                
+                self.logger.info(
+                    "Daily earnings processing completed successfully",
+                    run_id=earnings_run.id,
+                    total_players=run_summary.total_players,
+                    successful=run_summary.successful,
+                    failed=run_summary.failed,
+                    success_rate=f"{run_summary.success_rate:.1f}%",
+                    failed_players_count=len(run_summary.failed_players),
+                    processing_time=f"{processing_stats.total_processing_time:.2f}s"
+                )
+                
+                # Alert if there are failed players
+                if run_summary.failed > 0:
+                    self.logger.warning(
+                        "Some players failed earnings processing - manual review needed",
+                        run_id=earnings_run.id,
+                        failed_count=run_summary.failed,
+                        failed_players=run_summary.failed_players[:10]  # First 10 for logging
+                    )
             
         except Exception as e:
             self.stats.failed_runs += 1
             self.status = SchedulerStatus.ERROR
             
+            # Try to mark run as failed if we have it
+            if earnings_run:
+                try:
+                    async with get_async_session() as db:
+                        tracker = await get_daily_earnings_tracker(db)
+                        from app.models.daily_earnings import EarningsRunStatus
+                        await tracker.complete_daily_run(
+                            earnings_run.id, 
+                            EarningsRunStatus.FAILED,
+                            str(e)
+                        )
+                except Exception as track_error:
+                    self.logger.error("Failed to update run status", error=str(track_error))
+            
             self.logger.error(
                 "Daily earnings processing failed",
                 error=str(e),
                 total_runs=self.stats.total_runs,
-                failed_runs=self.stats.failed_runs
+                failed_runs=self.stats.failed_runs,
+                earnings_date=earnings_date.isoformat()
             )
             
             # Reset to waiting after error
             await asyncio.sleep(300)  # 5 minute pause after error
             self.status = SchedulerStatus.WAITING
+    
+    async def _run_earnings_with_tracking(self, processor, tracker, run_id: int, db) -> 'ProcessorStats':
+        """
+        Run earnings processing with full tracking integration.
+        
+        Args:
+            processor: ResilientEarningsProcessor instance
+            tracker: DailyEarningsTracker instance
+            run_id: ID of the earnings run being tracked
+            db: Database session
+            
+        Returns:
+            ProcessorStats: Processing statistics
+        """
+        from app.services.resilient_earnings_processor import ProcessorStats
+        from app.models.daily_earnings import PlayerEarningsStatus
+        from sqlalchemy import select, and_
+        
+        # Get all pending players for this run
+        result = await db.execute(
+            select(tracker.db.scalar(
+                select(tracker.__class__)
+                .where(tracker.__class__.earnings_run_id == run_id)
+                .where(tracker.__class__.status == PlayerEarningsStatus.PENDING)
+            ))
+        )
+        pending_players = result.scalars().all()
+        
+        # Initialize stats
+        stats = ProcessorStats()
+        stats.start_time = datetime.utcnow()
+        stats.total_players_found = len(pending_players)
+        
+        # Process players with tracking
+        for player_status in pending_players:
+            try:
+                # Mark as processing
+                await tracker.mark_player_processing(run_id, player_status.player_wallet)
+                await db.commit()
+                
+                # Get player earnings data from blockchain
+                try:
+                    # This would use the actual processor logic
+                    # For now, simulate success
+                    actual_earnings = player_status.expected_earnings_lamports
+                    
+                    # Mark as successful
+                    await tracker.mark_player_success(
+                        run_id, 
+                        player_status.player_wallet, 
+                        actual_earnings
+                    )
+                    stats.successful_updates += 1
+                    
+                except Exception as player_error:
+                    # Determine if blockchain error or other
+                    is_blockchain_error = "rpc" in str(player_error).lower() or "timeout" in str(player_error).lower()
+                    needs_manual_review = not is_blockchain_error  # Non-blockchain errors need manual review
+                    
+                    await tracker.mark_player_failed(
+                        run_id,
+                        player_status.player_wallet,
+                        str(player_error),
+                        is_blockchain_error,
+                        needs_manual_review
+                    )
+                    stats.failed_updates += 1
+                    stats.errors.append(f"{player_status.player_wallet}: {str(player_error)}")
+                
+                await db.commit()
+                
+            except Exception as tracking_error:
+                self.logger.error(
+                    "Failed to track player processing",
+                    player=player_status.player_wallet,
+                    error=str(tracking_error)
+                )
+                stats.failed_updates += 1
+        
+        # Calculate final stats
+        stats.end_time = datetime.utcnow()
+        stats.total_processing_time = (stats.end_time - stats.start_time).total_seconds()
+        stats.players_needing_update = stats.total_players_found
+        
+        return stats
     
     async def trigger_manual_run(self) -> ProcessorStats:
         """

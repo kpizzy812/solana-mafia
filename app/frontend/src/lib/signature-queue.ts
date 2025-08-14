@@ -257,9 +257,8 @@ export async function upgradeBusinessWithProcessing(
  * Enhanced business sell with signature processing
  */
 export async function sellBusinessWithProcessing(
-  sellFunction: (wallet: WalletContextState, businessId: string, slotIndex: number) => Promise<any>,
+  sellFunction: (wallet: WalletContextState, slotIndex: number) => Promise<any>,
   wallet: WalletContextState,
-  businessId: string,
   slotIndex: number,
   userWallet: string,
   statusCallback?: StatusUpdateCallback
@@ -269,13 +268,12 @@ export async function sellBusinessWithProcessing(
     statusCallback?.('sending', {});
     
     console.log('🚀 ENHANCED SELL: Starting with signature queue architecture', {
-      businessId,
       slotIndex,
       userWallet
     });
 
     // Execute the transaction and get signature
-    const result = await sellFunction(wallet, businessId, slotIndex);
+    const result = await sellFunction(wallet, slotIndex);
     const signature = result.signature || result;
     
     console.log('✅ ENHANCED SELL: Transaction sent, signature received', {
@@ -288,8 +286,7 @@ export async function sellBusinessWithProcessing(
     // Queue signature for backend processing
     const context: TransactionContext = {
       action_type: 'sell',
-      slot_index: slotIndex,
-      business_id: businessId
+      slot_index: slotIndex
     };
 
     const queued = await queueSignatureForProcessing(signature, userWallet, context);

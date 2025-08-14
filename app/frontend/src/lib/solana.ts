@@ -4,8 +4,8 @@ import { WalletContextState } from '@solana/wallet-adapter-react';
 import idl from '../solana_mafia.json';
 
 // Program ID configuration from environment variables
-const PROGRAM_ID_LOCALNET = process.env.NEXT_PUBLIC_PROGRAM_ID_LOCALNET || "3Ly6bEWRfKyVGwrRN27gHhBogo1K4HbZyk69KHW9AUx7";
-const PROGRAM_ID_DEVNET = process.env.NEXT_PUBLIC_PROGRAM_ID_DEVNET || "6T6Dt16T5vUCDDAR7CP6nkbe3S1D5oiSSxMpQ4kiBgmN";
+const PROGRAM_ID_LOCALNET = process.env.NEXT_PUBLIC_PROGRAM_ID_LOCALNET || "GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU";
+const PROGRAM_ID_DEVNET = process.env.NEXT_PUBLIC_PROGRAM_ID_DEVNET || "GtaYPUCEphDV1YgsS6VnBpTkkJwpuaQZf3ptFssyNvKU";
 
 // Use network from environment or default to devnet
 const NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet";
@@ -120,7 +120,7 @@ export const checkProgramStatus = async (wallet: WalletContextState) => {
     }
     
     try {
-      const gameConfigAccount = await program.account.gameConfig.fetch(gameConfig);
+      const gameConfigAccount = await (program.account as any).gameConfig.fetch(gameConfig);
       console.log('✅ Game config found:', gameConfigAccount);
     } catch (error) {
       console.error('❌ Game config not found:', error);
@@ -532,21 +532,29 @@ export const withdrawEarnings = async (
   // Get PDAs
   const [player] = getPlayerPDA(userPublicKey);
   const [treasury] = getTreasuryPDA();
-
-  console.log('Withdraw accounts:', {
-    playerOwner: userPublicKey.toString(),
-    player: player.toString(),
-    treasuryPda: treasury.toString(),
-  });
+  const [gameState] = getGameStatePDA();
 
   try {
-    // Create withdraw instruction
+    // Get treasury wallet from game state
+    const gameStateAccount = await program.account.gameState.fetch(gameState);
+
+    console.log('Withdraw accounts:', {
+      playerOwner: userPublicKey.toString(),
+      player: player.toString(),
+      treasuryPda: treasury.toString(),
+      gameState: gameState.toString(),
+      treasuryWallet: gameStateAccount.treasuryWallet.toString(),
+    });
+
+    // Create withdraw instruction following official Anchor withdrawal pattern
     const withdrawInstruction = await program.methods
       .claimEarnings()
       .accounts({
         playerOwner: userPublicKey,
         player: player,
         treasuryPda: treasury,
+        gameState: gameState,
+        treasuryWallet: gameStateAccount.treasuryWallet,
         systemProgram: SystemProgram.programId,
       })
       .instruction();
@@ -850,7 +858,6 @@ export const upgradeBusiness = async (
 // Sell Business in Slot
 export const sellBusiness = async (
   wallet: WalletContextState,
-  businessId: string,
   slotIndex: number
 ): Promise<string> => {
   if (!wallet.publicKey || !wallet.signTransaction) {
@@ -858,7 +865,6 @@ export const sellBusiness = async (
   }
 
   console.log('🔥 Starting business sale...', {
-    businessId,
     slotIndex,
     wallet: wallet.publicKey.toString()
   });
@@ -873,16 +879,20 @@ export const sellBusiness = async (
     const [gameConfig] = getGameConfigPDA();
     const [treasury] = getTreasuryPDA();
 
+    // Get treasury wallet for proper SOL transfer display in Phantom
+    const gameStateAccount = await program.account.gameState.fetch(gameState);
+
     console.log('Sell accounts:', {
       playerOwner: userPublicKey.toString(),
       player: player.toString(),
       gameState: gameState.toString(),
       gameConfig: gameConfig.toString(),
       treasuryPda: treasury.toString(),
+      treasuryWallet: gameStateAccount.treasuryWallet.toString(),
       slotIndex: slotIndex
     });
 
-    // Create sell instruction
+    // 🔧 FIXED: Use explicit accounts like working functions (createBusiness, upgradeBusiness)
     const sellInstruction = await program.methods
       .sellBusiness(slotIndex)
       .accounts({
@@ -891,9 +901,12 @@ export const sellBusiness = async (
         treasuryPda: treasury,
         gameState: gameState,
         gameConfig: gameConfig,
+        treasuryWallet: gameStateAccount.treasuryWallet,
         systemProgram: SystemProgram.programId,
       })
       .instruction();
+    
+    console.log('✅ Using explicit accounts (like working functions)');
 
     // Get fresh blockhash
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
@@ -906,13 +919,12 @@ export const sellBusiness = async (
 
     console.log('📋 Sell transaction details:', {
       instructions: transaction.instructions.length,
-      businessId: businessId,
       slotIndex: slotIndex
     });
 
-    // Send transaction to wallet
+    // Send transaction to wallet with proper simulation
     const signature = await wallet.sendTransaction!(transaction, connection, {
-      skipPreflight: false,
+      skipPreflight: false,  // Enable simulation (problems fixed with manual lamports)
       preflightCommitment: 'confirmed',
     });
 
@@ -986,7 +998,7 @@ export const getGameConfig = async (wallet: WalletContextState) => {
     const program = getProgram(wallet);
     const [gameConfig] = getGameConfigPDA();
     
-    const gameConfigAccount = await program.account.gameConfig.fetch(gameConfig);
+    const gameConfigAccount = await (program.account as any).gameConfig.fetch(gameConfig);
     
     return {
       treasuryFeePercent: gameConfigAccount.treasuryFeePercent,

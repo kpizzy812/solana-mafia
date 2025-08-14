@@ -24,6 +24,5 @@ serde = ["dep:serde"]
 
 [dependencies]
 anchor-lang = { version = "0.31.1", default-features = false, features = ["init-if-needed"] }
-anchor-spl = { version = "0.31.1", default-features = false, features = ["metadata", "token", "associated_token"] }
 serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
 

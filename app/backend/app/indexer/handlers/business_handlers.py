@@ -305,7 +305,20 @@ class BusinessHandlers:
             player_wallet = data["owner"]
             slot_index = data["slot_index"]
             
+            # Get upgrade cost to add to total_invested_amount
+            upgrade_cost = data.get("upgrade_cost", 0) or data.get("total_paid", 0)
+            
             # Update business record by player_wallet and slot_index
+            update_values = {
+                "level": data["new_level"],
+                "daily_rate": data["new_daily_rate"], 
+                "updated_at": event.block_time or datetime.utcnow()
+            }
+            
+            # Add upgrade cost to total_invested_amount if provided
+            if upgrade_cost > 0:
+                update_values["total_invested_amount"] = Business.total_invested_amount + upgrade_cost
+            
             await db.execute(
                 update(Business)
                 .where(
@@ -313,11 +326,7 @@ class BusinessHandlers:
                     (Business.slot_index == slot_index) &
                     (Business.is_active == True)
                 )
-                .values(
-                    level=data["new_level"],
-                    daily_rate=data["new_daily_rate"],
-                    updated_at=event.block_time or datetime.utcnow()
-                )
+                .values(**update_values)
             )
             
             self.stats.businesses_upgraded += 1
@@ -480,7 +489,20 @@ class BusinessHandlers:
             player_wallet = data["player"]
             slot_index = data["slot_index"]
             
+            # Get upgrade cost to add to total_invested_amount
+            upgrade_cost = data.get("upgrade_cost", 0) or data.get("total_paid", 0)
+            
             # Update business record by player_wallet and slot_index
+            update_values = {
+                "level": data["new_level"],
+                "daily_rate": data["new_daily_rate"], 
+                "updated_at": event.block_time or datetime.utcnow()
+            }
+            
+            # Add upgrade cost to total_invested_amount if provided
+            if upgrade_cost > 0:
+                update_values["total_invested_amount"] = Business.total_invested_amount + upgrade_cost
+            
             await db.execute(
                 update(Business)
                 .where(
@@ -488,11 +510,7 @@ class BusinessHandlers:
                     (Business.slot_index == slot_index) &
                     (Business.is_active == True)
                 )
-                .values(
-                    level=data["new_level"],
-                    daily_rate=data["new_daily_rate"],
-                    updated_at=event.block_time or datetime.utcnow()
-                )
+                .values(**update_values)
             )
             
             self.stats.businesses_upgraded += 1

@@ -83,6 +83,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
             businessType={businessType}
             businessData={businessData}
             currentLevel={currentLevel}
+            targetLevel={calculations.canUpgrade ? targetLevel : undefined}
           />
 
           {/* Max Level Warning */}

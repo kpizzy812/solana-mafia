@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::system_program;
 
 use crate::state::*;
 use crate::error::SolanaMafiaError;
@@ -56,15 +57,18 @@ pub fn claim_earnings(ctx: Context<crate::ClaimEarnings>) -> Result<()> {
         return Err(ProgramError::InsufficientFunds.into());
     }
     
-    // 💰 ИСПРАВЛЕНО: Transfer earnings to player + claim fee to admins
-    // 1. Transfer net amount from treasury PDA to player
-    ctx.accounts.treasury_pda.sub_lamports(net_amount)?;
-    ctx.accounts.player_owner.add_lamports(net_amount)?;
+    // Transfer earnings from treasury PDA to player using manual lamports manipulation
+    // (System Program can't transfer from accounts with data, so we do it manually)
+    if net_amount > 0 {
+        **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= net_amount;
+        **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += net_amount;
+        msg!("💰 Transferred {} lamports earnings to player", net_amount);
+    }
     
-    // 2. Transfer claim fee from treasury PDA to admins
+    // Transfer claim fee from treasury PDA to admins using manual lamports manipulation
     if claim_fee > 0 {
-        ctx.accounts.treasury_pda.sub_lamports(claim_fee)?;
-        ctx.accounts.treasury_wallet.add_lamports(claim_fee)?;
+        **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= claim_fee;
+        **ctx.accounts.treasury_wallet.to_account_info().try_borrow_mut_lamports()? += claim_fee;
         msg!("💳 Claim fee {} lamports sent to admins", claim_fee);
     }
     
