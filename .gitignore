@@ -1,11 +1,105 @@
+# Build outputs
 .anchor
-.DS_Store
-target
+target/
+**/target/
 **/*.rs.bk
-node_modules
-test-ledger
-.yarn
-backups
+node_modules/
+.yarn/
+
+# Environment files (CRITICAL - contains secrets)
 .env
-.env.prod
+.env.*
+!.env.example
+!.env.*.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# Solana keypairs and secrets (CRITICAL - private keys)
+*-keypair.json
+**/*-keypair.json
+**/id.json
+validator-keypair.json
+vote-account-keypair.json
+faucet-keypair.json
+stake-account-keypair.json
+*.pem
+*.key
+wallet.json
+
+# Test ledger data
+test-ledger/
+**/*test-ledger/
+
+# Logs
+*.log
+**/*.log
+logs/
+validator.log
+
+# System files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Frontend builds and cache
+.next/
+**/.next/
+dist/
+build/
+.turbo/
+**/.turbo/
+
+# Package manager
+yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.npm
+.pnp.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+.dockerignore
+
+# Backup and archive directories
+backups/
+archive/
+old-*/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS generated files
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 
