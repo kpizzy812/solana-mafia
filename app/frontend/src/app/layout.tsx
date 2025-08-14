@@ -18,6 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Solana Mafia - Business Empire Game",
   description: "Build your business empire on Solana blockchain",
+  icons: {
+    icon: '/icons/logo.png',
+    shortcut: '/icons/logo.png',
+    apple: '/icons/logo.png',
+  },
 };
 
 export const viewport: Viewport = {

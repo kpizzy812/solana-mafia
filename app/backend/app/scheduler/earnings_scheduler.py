@@ -317,12 +317,16 @@ class BlockchainEarningsScheduler:
         from sqlalchemy import select, and_
         
         # Get all pending players for this run
+        from app.models.daily_earnings import PlayerDailyEarningsStatus
+        
         result = await db.execute(
-            select(tracker.db.scalar(
-                select(tracker.__class__)
-                .where(tracker.__class__.earnings_run_id == run_id)
-                .where(tracker.__class__.status == PlayerEarningsStatus.PENDING)
-            ))
+            select(PlayerDailyEarningsStatus)
+            .where(
+                and_(
+                    PlayerDailyEarningsStatus.earnings_run_id == run_id,
+                    PlayerDailyEarningsStatus.status == PlayerEarningsStatus.PENDING
+                )
+            )
         )
         pending_players = result.scalars().all()
         

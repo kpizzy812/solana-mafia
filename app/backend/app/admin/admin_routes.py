@@ -2,12 +2,13 @@
 Admin dashboard API routes for system monitoring and management.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
 from app.core.database import get_db_session
 from app.api.schemas.common import SuccessResponse, create_success_response
@@ -757,4 +758,373 @@ async def sync_dynamic_price(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to sync dynamic price"
+        )
+
+
+# ============================================================================
+# DAILY EARNINGS MANAGEMENT ENDPOINTS
+# ============================================================================
+
+class ManualEarningsRequest(BaseModel):
+    player_wallet: str
+    earnings_date: str  # YYYY-MM-DD format
+    resolution_note: str
+    applied_earnings: Optional[int] = None
+
+
+@admin_router.get(
+    "/earnings/runs",
+    response_model=SuccessResponse,
+    summary="Daily Earnings Runs",
+    description="Get list of daily earnings processing runs with status and statistics"
+)
+async def get_daily_earnings_runs(
+    auth: dict = Depends(require_admin_auth),
+    limit: int = Query(30, ge=1, le=100, description="Number of runs to retrieve"),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get list of daily earnings processing runs."""
+    try:
+        from app.services.daily_earnings_tracker import get_daily_earnings_tracker
+        from app.models.daily_earnings import DailyEarningsRun
+        from sqlalchemy import select, desc
+        
+        # Get recent earnings runs
+        result = await db.execute(
+            select(DailyEarningsRun)
+            .order_by(desc(DailyEarningsRun.started_at))
+            .limit(limit)
+        )
+        runs = result.scalars().all()
+        
+        runs_data = []
+        for run in runs:
+            runs_data.append({
+                "id": run.id,
+                "earnings_date": run.earnings_date.isoformat(),
+                "status": run.status,
+                "total_players": run.total_players_found,
+                "successful": run.players_processed,
+                "failed": run.players_failed,
+                "skipped": run.players_skipped,
+                "success_rate": run.success_rate,
+                "started_at": run.started_at.isoformat(),
+                "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+                "duration_minutes": (run.processing_duration_seconds // 60) if run.processing_duration_seconds else None,
+                "triggered_by": run.triggered_by,
+                "error_message": run.error_message,
+                "has_failed_players": run.has_failed_players
+            })
+        
+        return create_success_response(
+            data={
+                "runs": runs_data,
+                "total_returned": len(runs_data),
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            message=f"Retrieved {len(runs_data)} earnings runs"
+        )
+        
+    except Exception as e:
+        logger.error("Error getting earnings runs", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve earnings runs"
+        )
+
+
+@admin_router.get(
+    "/earnings/runs/{run_id}/details",
+    response_model=SuccessResponse,
+    summary="Earnings Run Details",
+    description="Get detailed information about a specific earnings run including failed players"
+)
+async def get_earnings_run_details(
+    run_id: int,
+    auth: dict = Depends(require_admin_auth),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get detailed information about a specific earnings run."""
+    try:
+        from app.services.daily_earnings_tracker import get_daily_earnings_tracker
+        
+        tracker = await get_daily_earnings_tracker(db)
+        summary = await tracker.get_run_summary(run_id)
+        
+        return create_success_response(
+            data={
+                "run_summary": {
+                    "run_id": summary.run_id,
+                    "earnings_date": summary.earnings_date.isoformat(),
+                    "status": summary.status,
+                    "total_players": summary.total_players,
+                    "successful": summary.successful,
+                    "failed": summary.failed,
+                    "success_rate": summary.success_rate,
+                    "started_at": summary.started_at.isoformat(),
+                    "completed_at": summary.completed_at.isoformat() if summary.completed_at else None,
+                    "duration_minutes": summary.duration_minutes,
+                    "failed_players": summary.failed_players
+                }
+            },
+            message=f"Retrieved details for earnings run {run_id}"
+        )
+        
+    except Exception as e:
+        logger.error("Error getting earnings run details", error=str(e), run_id=run_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve details for earnings run {run_id}"
+        )
+
+
+@admin_router.get(
+    "/earnings/failed-players",
+    response_model=SuccessResponse,
+    summary="Failed Earnings Players",
+    description="Get list of players who failed earnings processing for a specific date"
+)
+async def get_failed_earnings_players(
+    earnings_date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    auth: dict = Depends(require_admin_auth),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get players who failed earnings processing for a specific date."""
+    try:
+        from app.services.daily_earnings_tracker import get_daily_earnings_tracker
+        from datetime import datetime
+        
+        # Parse date
+        target_date = datetime.strptime(earnings_date, "%Y-%m-%d").date()
+        
+        tracker = await get_daily_earnings_tracker(db)
+        failed_players = await tracker.get_failed_players_for_date(target_date)
+        
+        return create_success_response(
+            data={
+                "earnings_date": earnings_date,
+                "failed_players": failed_players,
+                "total_failed": len(failed_players),
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            message=f"Retrieved {len(failed_players)} failed players for {earnings_date}"
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
+    except Exception as e:
+        logger.error("Error getting failed players", error=str(e), date=earnings_date)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve failed players"
+        )
+
+
+@admin_router.post(
+    "/earnings/retry-player",
+    response_model=SuccessResponse,
+    summary="Retry Player Earnings",
+    description="Retry earnings processing for a specific failed player"
+)
+async def retry_player_earnings(
+    player_wallet: str = Query(..., description="Player wallet address"),
+    earnings_date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    auth: dict = Depends(require_admin_auth),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Retry earnings processing for a specific failed player."""
+    try:
+        from app.services.daily_earnings_tracker import get_daily_earnings_tracker
+        from datetime import datetime
+        
+        # Parse date
+        target_date = datetime.strptime(earnings_date, "%Y-%m-%d").date()
+        
+        tracker = await get_daily_earnings_tracker(db)
+        success = await tracker.retry_failed_player(
+            player_wallet=player_wallet,
+            earnings_date=target_date,
+            admin_wallet=auth.get("wallet", "admin")
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Player not found in failed earnings list for this date"
+            )
+        
+        logger.info(
+            "Admin retried player earnings",
+            admin_wallet=auth.get("wallet"),
+            player_wallet=player_wallet,
+            earnings_date=earnings_date
+        )
+        
+        return create_success_response(
+            data={
+                "player_wallet": player_wallet,
+                "earnings_date": earnings_date,
+                "retried_by": auth.get("wallet", "admin"),
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            message=f"Player {player_wallet} marked for retry processing"
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error retrying player earnings", error=str(e), player=player_wallet)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retry player earnings"
+        )
+
+
+@admin_router.post(
+    "/earnings/manual-resolve",
+    response_model=SuccessResponse,
+    summary="Manually Resolve Player Earnings",
+    description="Manually mark a player's earnings as resolved by admin"
+)
+async def manually_resolve_player_earnings(
+    request: ManualEarningsRequest,
+    auth: dict = Depends(require_admin_auth),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Manually resolve a player's earnings issue."""
+    try:
+        from app.services.daily_earnings_tracker import get_daily_earnings_tracker
+        from datetime import datetime
+        
+        # Parse date
+        target_date = datetime.strptime(request.earnings_date, "%Y-%m-%d").date()
+        
+        tracker = await get_daily_earnings_tracker(db)
+        success = await tracker.manually_resolve_player(
+            player_wallet=request.player_wallet,
+            earnings_date=target_date,
+            admin_wallet=auth.get("wallet", "admin"),
+            resolution_note=request.resolution_note,
+            applied_earnings=request.applied_earnings
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Player earnings record not found for this date"
+            )
+        
+        logger.info(
+            "Admin manually resolved player earnings",
+            admin_wallet=auth.get("wallet"),
+            player_wallet=request.player_wallet,
+            earnings_date=request.earnings_date,
+            applied_earnings=request.applied_earnings
+        )
+        
+        return create_success_response(
+            data={
+                "player_wallet": request.player_wallet,
+                "earnings_date": request.earnings_date,
+                "applied_earnings": request.applied_earnings,
+                "resolution_note": request.resolution_note,
+                "resolved_by": auth.get("wallet", "admin"),
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            message=f"Player {request.player_wallet} earnings manually resolved"
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error manually resolving earnings", error=str(e), player=request.player_wallet)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to manually resolve player earnings"
+        )
+
+
+@admin_router.post(
+    "/earnings/trigger-manual-run",
+    response_model=SuccessResponse,
+    summary="Trigger Manual Earnings Run",
+    description="Manually trigger earnings processing for a specific date"
+)
+async def trigger_manual_earnings_run(
+    earnings_date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    force: bool = Query(False, description="Force run even if already completed for this date"),
+    auth: dict = Depends(require_admin_auth),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Manually trigger earnings processing for a specific date."""
+    try:
+        from app.services.daily_earnings_tracker import get_daily_earnings_tracker
+        from app.scheduler.earnings_scheduler import get_blockchain_earnings_scheduler
+        from datetime import datetime
+        
+        # Parse date
+        target_date = datetime.strptime(earnings_date, "%Y-%m-%d").date()
+        
+        if not force:
+            # Check if already completed
+            tracker = await get_daily_earnings_tracker(db)
+            existing_run = await tracker._get_latest_run_for_date(target_date)
+            if existing_run and existing_run.is_complete:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Earnings already processed for {earnings_date}. Use force=true to override."
+                )
+        
+        # Trigger manual run through scheduler
+        scheduler = await get_blockchain_earnings_scheduler()
+        processing_stats = await scheduler.trigger_manual_run()
+        
+        logger.info(
+            "Admin triggered manual earnings run",
+            admin_wallet=auth.get("wallet"),
+            earnings_date=earnings_date,
+            force=force
+        )
+        
+        return create_success_response(
+            data={
+                "earnings_date": earnings_date,
+                "triggered_by": auth.get("wallet", "admin"),
+                "force": force,
+                "processing_stats": {
+                    "total_players": processing_stats.total_players_found,
+                    "successful": processing_stats.successful_updates,
+                    "failed": processing_stats.failed_updates,
+                    "processing_time": processing_stats.total_processing_time
+                },
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            message=f"Manual earnings run triggered for {earnings_date}"
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error triggering manual earnings run", error=str(e), date=earnings_date)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to trigger manual earnings run"
         )

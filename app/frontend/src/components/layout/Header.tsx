@@ -8,6 +8,8 @@ import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { Star } from 'lucide-react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { apiClient } from '@/lib/api';
+import Image from 'next/image';
+import Link from 'next/link';
 
 interface HeaderProps {
   language?: 'en' | 'ru';
@@ -160,20 +162,38 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 items-center justify-between px-3 gap-2 min-w-0">
-        {/* Language Selector */}
-        {onLanguageChange && (
-          <div className="flex-shrink-0">
+      <div className="container mx-auto flex h-16 items-center justify-between px-3 gap-3 min-w-0">
+        {/* Left Section: Logo + Language Selector */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Logo */}
+          <div className="flex items-center">
+            <Link href="/" className="relative group cursor-pointer">
+              <Image
+                src="/icons/logo.png"
+                alt="Solana Mafia"
+                width={48}
+                height={48}
+                className="w-12 h-12 transition-all duration-200 group-hover:scale-105 brightness-125 contrast-125 saturate-110"
+                priority
+                style={{
+                  filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.1)) drop-shadow(0 0 16px rgba(139,92,246,0.3))'
+                }}
+              />
+            </Link>
+          </div>
+
+          {/* Language Selector */}
+          {onLanguageChange && (
             <LanguageSelector
               language={language}
               onLanguageChange={onLanguageChange}
             />
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Player Stats - center when connected */}
+        {/* Center Section: Player Stats when connected */}
         {connected && (
-          <div className="flex items-center space-x-2 flex-shrink min-w-0">
+          <div className="flex items-center justify-center flex-1 min-w-0">
             {/* Prestige Display */}
             <div className="flex items-center space-x-2 px-3 py-2 rounded-lg bg-card text-card-foreground hover:bg-accent hover:text-accent-foreground transition-colors text-sm font-medium h-[40px]">
               <Star className="w-4 h-4 text-yellow-500 flex-shrink-0" />
@@ -211,7 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Wallet Connection */}
+        {/* Right Section: Wallet Connection */}
         <div className="flex-shrink-0">
           <WalletButton language={language} />
         </div>
