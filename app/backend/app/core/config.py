@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     host: str = "127.0.0.1"
     port: int = 8000
+    site_domain: str = Field(
+        default="localhost",
+        env="SITE_DOMAIN",
+        description="Site domain for TrustedHostMiddleware"
+    )
     cors_origins: Union[str, List[str]] = Field(
         default=["http://localhost:3000", "http://localhost:3001"],
         env="CORS_ORIGINS"

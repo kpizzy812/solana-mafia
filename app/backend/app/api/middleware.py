@@ -203,6 +203,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/docs",
             "/openapi.json",
             "/redoc",
+            "/ws/",
         }
         self.wallet_auth = WalletAuth()
         self.tma_auth = TelegramMiniAppAuth(
@@ -217,7 +218,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             path.startswith("/docs") or
             path.startswith("/redoc") or
             path.startswith("/openapi") or
-            path.startswith("/static")
+            path.startswith("/static") or
+            path.startswith("/ws/")
         )
     
     def _extract_auth_data(self, request: Request) -> tuple[Optional[str], Optional[dict]]:

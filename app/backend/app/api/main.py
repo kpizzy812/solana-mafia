@@ -3,7 +3,7 @@ Main FastAPI application for Solana Mafia backend.
 Configures the API server with routes, middleware, and documentation.
 """
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, WebSocket
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
@@ -13,11 +13,13 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.api.middleware import add_middleware
 from app.api.schemas.common import HealthCheckResponse, APIResponse
-from app.api.routes import players, businesses, earnings, stats, tma, referrals, prestige, transactions, quests, leaderboards
+from app.api.routes import players, businesses, earnings, stats, tma, referrals, prestige, transactions, quests, leaderboards, sync
+from app.api import business_sync
 from app.indexer.event_indexer import get_event_indexer
 from app.scheduler.earnings_scheduler import get_earnings_scheduler
 from app.scheduler.prestige_scheduler import get_prestige_scheduler
 from app.services.signature_processor import get_signature_processor
+from app.services.blockchain_sync_service import start_blockchain_sync
 
 
 logger = structlog.get_logger(__name__)
@@ -45,7 +47,10 @@ async def lifespan(app: FastAPI):
             await earnings_scheduler.start()
             await prestige_scheduler.start()
             
-            logger.info("Background services started")
+            # Start blockchain sync service
+            await start_blockchain_sync()
+            
+            logger.info("Background services started (including blockchain sync)")
     except Exception as e:
         logger.error("Failed to start background services", error=str(e))
     
@@ -258,12 +263,45 @@ def create_app() -> FastAPI:
         tags=["Leaderboards"]
     )
     
+    app.include_router(
+        sync.router,
+        prefix=f"{settings.api_v1_prefix}/sync",
+        tags=["Blockchain Sync"]
+    )
+    
+    app.include_router(
+        business_sync.router,
+        prefix=f"{settings.api_v1_prefix}/business-sync",
+        tags=["Business Sync"]
+    )
+    
     logger.info("FastAPI application created successfully")
     return app
 
 
 # Create app instance
 app = create_app()
+
+
+# WebSocket endpoints (must be after app creation)
+@app.websocket("/ws/{wallet}")
+async def websocket_endpoint(websocket: WebSocket, wallet: str):
+    """WebSocket endpoint for real-time player updates."""
+    from app.websocket.websocket_handler import websocket_handler
+    client_id = websocket.query_params.get("client_id")
+    await websocket_handler(websocket, wallet, client_id)
+
+
+# WebSocket stats endpoint
+@app.get(
+    "/ws/stats",
+    tags=["WebSocket"],
+    summary="WebSocket Statistics"
+)
+async def websocket_stats():
+    """Get WebSocket connection statistics."""
+    from app.websocket.websocket_handler import get_websocket_stats
+    return await get_websocket_stats()
 
 
 if __name__ == "__main__":

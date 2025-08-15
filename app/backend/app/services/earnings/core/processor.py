@@ -94,7 +94,7 @@ class ResilientEarningsProcessor:
         self.stats = ProcessorStats(start_time=datetime.now(timezone.utc))
         
         try:
-            self.logger.info("Starting daily earnings process")
+            self.logger.info("Starting daily earnings process with business sync")
             
             # Step 1: Cleanup failed players blacklist
             self.transaction_manager.cleanup_failed_players()
@@ -108,14 +108,86 @@ class ResilientEarningsProcessor:
                 self.status = ProcessorStatus.COMPLETED
                 return self.stats
             
+            # 🔥 НОВЫЙ ШАГ: Синхронизация business данных с blockchain
+            self.logger.info("🔄 Step 2.1: Synchronizing business data with blockchain")
+            sync_start_time = datetime.now(timezone.utc)
+            
+            from app.services.player_business_sync import get_player_business_sync_service
+            
+            business_sync_service = await get_player_business_sync_service()
+            sync_successful = 0
+            sync_failed = 0
+            total_businesses_synced = 0
+            total_businesses_added = 0
+            total_businesses_updated = 0
+            total_portfolio_corrections = 0
+            
+            # Batch sync всех активных игроков
+            for wallet in active_wallets:
+                try:
+                    sync_report = await business_sync_service.sync_player_businesses(wallet)
+                    if sync_report.get("success", False):
+                        sync_successful += 1
+                        
+                        # Собираем статистику
+                        total_businesses_synced += sync_report.get("businesses_synced", 0)
+                        total_businesses_added += sync_report.get("businesses_added", 0)
+                        total_businesses_updated += sync_report.get("businesses_updated", 0)
+                        if sync_report.get("portfolio_corrected", False):
+                            total_portfolio_corrections += 1
+                        
+                        # Логируем важные изменения
+                        if sync_report.get("businesses_synced", 0) > 0:
+                            self.logger.info(
+                                "✅ Business sync completed",
+                                wallet=wallet,
+                                businesses_synced=sync_report.get("businesses_synced", 0),
+                                businesses_added=sync_report.get("businesses_added", 0),
+                                businesses_updated=sync_report.get("businesses_updated", 0),
+                                portfolio_corrected=sync_report.get("portfolio_corrected", False)
+                            )
+                    else:
+                        sync_failed += 1
+                        error = sync_report.get("error", "Unknown error")
+                        self.logger.warning("⚠️ Business sync failed", wallet=wallet, error=error)
+                        
+                except Exception as sync_error:
+                    sync_failed += 1
+                    self.logger.error("❌ Business sync error", wallet=wallet, error=str(sync_error))
+            
+            sync_duration = (datetime.now(timezone.utc) - sync_start_time).total_seconds()
+            
+            # Сохраняем статистику в ProcessorStats
+            self.stats.business_sync_successful = sync_successful
+            self.stats.business_sync_failed = sync_failed
+            self.stats.business_sync_duration = sync_duration
+            self.stats.businesses_synced_total = total_businesses_synced
+            self.stats.businesses_added_total = total_businesses_added
+            self.stats.businesses_updated_total = total_businesses_updated
+            self.stats.portfolio_corrections_total = total_portfolio_corrections
+            
+            self.logger.info(
+                "🔄 Business synchronization completed",
+                total_players=len(active_wallets),
+                sync_successful=sync_successful,
+                sync_failed=sync_failed,
+                sync_rate=f"{(sync_successful / len(active_wallets) * 100):.1f}%",
+                sync_duration=f"{sync_duration:.2f}s",
+                businesses_synced=total_businesses_synced,
+                businesses_added=total_businesses_added,
+                businesses_updated=total_businesses_updated,
+                portfolio_corrections=total_portfolio_corrections
+            )
+            
             # Step 3: Send update_earnings transactions to ALL players
-            self.logger.info("Sending update_earnings transactions to ALL active players")
+            self.logger.info("📡 Step 3: Sending update_earnings transactions to ALL active players")
             self.stats.players_needing_update = len(active_wallets)  # All players get updates
             
             self.logger.info(
                 "Processing ALL players for earnings updates",
                 total_players=len(active_wallets),
-                strategy="send_all_then_process_events"
+                strategy="blockchain_sync_then_send_earnings",
+                business_sync_rate=f"{(sync_successful / len(active_wallets) * 100):.1f}%"
             )
             
             # Send transactions to ALL active players without blockchain reads
@@ -133,7 +205,13 @@ class ResilientEarningsProcessor:
             self.logger.info(
                 "Daily earnings process completed successfully",
                 total_time=f"{self.stats.total_processing_time:.2f}s",
-                success_rate=f"{self.stats.success_rate * 100:.1f}%"
+                earnings_success_rate=f"{self.stats.success_rate * 100:.1f}%",
+                business_sync_rate=f"{self.stats.business_sync_rate * 100:.1f}%",
+                business_sync_duration=f"{self.stats.business_sync_duration:.2f}s",
+                businesses_synced=self.stats.businesses_synced_total,
+                businesses_added=self.stats.businesses_added_total,
+                businesses_updated=self.stats.businesses_updated_total,
+                portfolio_corrections=self.stats.portfolio_corrections_total
             )
             
             return self.stats

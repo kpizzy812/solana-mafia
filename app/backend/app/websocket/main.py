@@ -8,12 +8,12 @@ import signal
 from datetime import datetime
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from .websocket_handler import websocket_router
+from .websocket_handler import websocket_handler
 from .connection_manager import get_connection_manager
 
 import structlog
@@ -41,8 +41,12 @@ def create_websocket_app() -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Include WebSocket routes
-    app.include_router(websocket_router)
+    # WebSocket endpoint
+    @app.websocket("/ws/{wallet}")
+    async def websocket_endpoint(websocket: WebSocket, wallet: str):
+        """WebSocket endpoint for real-time player updates."""
+        client_id = websocket.query_params.get("client_id")
+        await websocket_handler(websocket, wallet, client_id)
     
     @app.get("/health")
     async def health_check():

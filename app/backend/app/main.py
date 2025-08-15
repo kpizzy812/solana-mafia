@@ -4,7 +4,7 @@ Main FastAPI application entry point.
 
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, WebSocket
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
@@ -12,7 +12,8 @@ from app.core.logging import setup_logging
 from app.core.database import init_database, close_database
 from app.api.middleware import add_middleware
 from app.api.schemas.common import HealthCheckResponse, APIResponse
-from app.api.routes import players, businesses, earnings, stats, transactions, referrals, prestige, quests, leaderboards
+from app.api.routes import players, businesses, earnings, stats, transactions, referrals, prestige, quests, leaderboards, sync
+from app.api import business_sync
 from app.websocket.websocket_handler import websocket_handler, get_websocket_stats
 from app.admin.admin_routes import admin_router
 
@@ -43,6 +44,11 @@ async def lifespan(app: FastAPI):
             from app.services.dynamic_pricing_service import dynamic_pricing_service
             logger.info("Starting dynamic pricing service")
             asyncio.create_task(dynamic_pricing_service.start_price_monitoring())
+        
+        # Start blockchain sync service
+        from app.services.blockchain_sync_service import start_blockchain_sync
+        await start_blockchain_sync()
+        logger.info("Blockchain sync service started")
             
         if settings.is_production:
             logger.info("Production mode - additional services initialized")
@@ -58,6 +64,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down application")
     try:
+        # Stop blockchain sync service
+        from app.services.blockchain_sync_service import stop_blockchain_sync
+        await stop_blockchain_sync()
+        logger.info("Blockchain sync service stopped")
+        
         # Stop signature processor
         from app.services.signature_processor import shutdown_signature_processor
         await shutdown_signature_processor()
@@ -87,6 +98,7 @@ app = FastAPI(
     * **Real-time Updates** - Live data from Solana blockchain
     * **WebSocket Support** - Real-time notifications and updates
     * **Leaderboards** - Rankings by earnings, referrals, and prestige
+    * **Blockchain Sync** - Automatic synchronization with blockchain state
     
     ## Authentication
     
@@ -172,7 +184,8 @@ async def root():
                 "Earnings System",
                 "NFT Integration",
                 "Real-time Updates",
-                "Leaderboards & Rankings"
+                "Leaderboards & Rankings",
+                "Blockchain Synchronization"
             ]
         }
     )
@@ -262,6 +275,18 @@ app.include_router(
     tags=["Leaderboards"]
 )
 
+app.include_router(
+    sync.router,
+    prefix=f"{settings.api_v1_prefix}/sync",
+    tags=["Blockchain Sync"]
+)
+
+app.include_router(
+    business_sync.router,
+    prefix=f"{settings.api_v1_prefix}/business-sync",
+    tags=["Business Sync"]
+)
+
 # Admin endpoints
 app.include_router(
     admin_router,
@@ -269,10 +294,11 @@ app.include_router(
     tags=["Admin"]
 )
 
-# WebSocket endpoints
+# WebSocket endpoints  
 @app.websocket("/ws/{wallet}")
-async def websocket_endpoint(websocket, wallet: str, client_id: str = None):
+async def websocket_endpoint(websocket: WebSocket, wallet: str):
     """WebSocket endpoint for real-time player updates."""
+    client_id = websocket.query_params.get("client_id")
     await websocket_handler(websocket, wallet, client_id)
 
 # WebSocket stats endpoint

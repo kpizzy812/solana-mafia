@@ -25,6 +25,7 @@ import structlog
 from app.core.config import settings
 from app.core.exceptions import SolanaRPCError
 from app.services.solana_client import get_solana_client
+from app.services.pda_validator import validate_players_before_earnings
 
 
 logger = structlog.get_logger(__name__)
@@ -190,6 +191,8 @@ class TransactionService:
         Send permissionless update_earnings transaction for a player.
         Anyone can call this - no admin privileges required.
         
+        ✨ ENHANCED with PDA validation to prevent transaction failures!
+        
         Args:
             player_wallet: Player's wallet address
             
@@ -199,6 +202,20 @@ class TransactionService:
         try:
             if not self.admin_keypair or not self.client:
                 await self.initialize()
+            
+            # 🔍 ENHANCED: Pre-validate Player PDA to prevent transaction failures
+            valid_wallets = await validate_players_before_earnings([player_wallet])
+            
+            if not valid_wallets:
+                self.logger.warning(
+                    "🚫 Player PDA validation failed - skipping transaction",
+                    wallet=player_wallet
+                )
+                return TransactionResult(
+                    signature="",
+                    success=False,
+                    error="Player PDA does not exist in blockchain - transaction would fail"
+                )
                 
             player_pubkey = Pubkey.from_string(player_wallet)
             
@@ -351,17 +368,25 @@ class TransactionService:
             self.logger.error("Failed batch earnings update", error=str(e))
             raise SolanaRPCError(f"Failed batch earnings update: {e}")
     
-    async def update_players_earnings_batch_transaction(self, player_wallets: List[str]) -> TransactionResult:
+    async def update_players_earnings_batch_transaction(
+        self, 
+        player_wallets: List[str], 
+        skip_validation: bool = False
+    ) -> TransactionResult:
         """
         🚀 TRUE BATCH: Send ONE transaction with multiple update_earnings instructions.
+        
+        ✨ ENHANCED with PDA validation to prevent "Blockhash not found" errors!
         
         More efficient than multiple transactions:
         - 1 RPC call instead of N calls
         - Lower network overhead
         - Atomic execution (all succeed or all fail)
+        - Pre-validates all Player PDAs exist in blockchain
         
         Args:
             player_wallets: List of player wallet addresses (max 5-10 recommended)
+            skip_validation: Skip PDA validation (for testing only)
             
         Returns:
             Single TransactionResult for the batch transaction
@@ -372,6 +397,50 @@ class TransactionService:
             
             if len(player_wallets) > 10:
                 raise ValueError(f"Batch size {len(player_wallets)} too large, max 10 recommended")
+            
+            # 🔍 ENHANCED: Pre-validate Player PDAs to prevent transaction failures
+            original_count = len(player_wallets)
+            
+            if not skip_validation:
+                self.logger.info(
+                    "🔍 Validating Player PDAs before batch transaction",
+                    players_count=original_count
+                )
+                
+                # Фильтруем только валидные игроков (с существующими PDA)
+                valid_player_wallets = await validate_players_before_earnings(player_wallets)
+                
+                filtered_count = len(valid_player_wallets)
+                invalid_count = original_count - filtered_count
+                
+                if invalid_count > 0:
+                    invalid_wallets = [w for w in player_wallets if w not in valid_player_wallets]
+                    self.logger.warning(
+                        "🚫 Filtered out players with invalid PDAs",
+                        original_count=original_count,
+                        valid_count=filtered_count,
+                        invalid_count=invalid_count,
+                        invalid_wallets=invalid_wallets[:3]  # Показываем первые 3
+                    )
+                
+                if not valid_player_wallets:
+                    self.logger.error("❌ No valid players found after PDA validation")
+                    return TransactionResult(
+                        signature="",
+                        success=False,
+                        error="No valid players found - all Player PDAs are missing in blockchain"
+                    )
+                
+                # Используем только валидные кошельки
+                player_wallets = valid_player_wallets
+                
+                self.logger.info(
+                    "✅ PDA validation completed",
+                    valid_players=len(player_wallets),
+                    filtered_out=invalid_count
+                )
+            else:
+                self.logger.warning("⚠️ Skipping PDA validation (testing mode)")
                 
             self.logger.info(
                 "Creating batch earnings transaction",

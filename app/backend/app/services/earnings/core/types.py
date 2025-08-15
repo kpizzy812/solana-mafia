@@ -32,6 +32,14 @@ class ProcessorStats:
     individual_reads_fallback: int = 0
     database_sync_time: float = 0.0
     total_processing_time: float = 0.0
+    # 🔥 НОВЫЕ ПОЛЯ: Business sync статистика
+    business_sync_successful: int = 0
+    business_sync_failed: int = 0
+    business_sync_duration: float = 0.0
+    businesses_synced_total: int = 0
+    businesses_added_total: int = 0
+    businesses_updated_total: int = 0
+    portfolio_corrections_total: int = 0
     errors: List[str] = field(default_factory=list)
     
     @property
@@ -39,6 +47,14 @@ class ProcessorStats:
         if self.players_needing_update == 0:
             return 0.0
         return self.successful_updates / self.players_needing_update
+    
+    @property
+    def business_sync_rate(self) -> float:
+        """Business synchronization success rate."""
+        total_sync_attempts = self.business_sync_successful + self.business_sync_failed
+        if total_sync_attempts == 0:
+            return 0.0
+        return self.business_sync_successful / total_sync_attempts
 
 
 @dataclass
