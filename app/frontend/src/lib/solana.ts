@@ -15,11 +15,8 @@ export const PROGRAM_ID = new PublicKey(PROGRAM_ID_STRING);
 
 console.log('Using Program ID:', PROGRAM_ID_STRING);
 
-// Connection configuration - using devnet for now since localhost is not running
-// Alternative endpoints for better simulation support:
-// const RPC_ENDPOINT = 'https://devnet.helius-rpc.com/?api-key=YOUR_KEY'; 
-// const RPC_ENDPOINT = 'https://solana-devnet.g.alchemy.com/v2/YOUR_KEY';
-const RPC_ENDPOINT = 'https://api.devnet.solana.com'; // Use devnet
+// Connection configuration - using environment variable or fallback to devnet
+const RPC_ENDPOINT = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 
 console.log('Using RPC endpoint:', RPC_ENDPOINT);
 

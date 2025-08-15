@@ -130,18 +130,12 @@ pub fn create_business(
         treasury_amount,
     )?;
 
-    // Create business (для слотов 3-5 включаем slot_cost в стоимость бизнеса)
-    let business_value = if slot_index >= 3 && slot_index <= 5 && slot_cost > 0 {
-        // Для базовых платных слотов включаем slot_cost в стоимость бизнеса
-        deposit_amount.checked_add(slot_cost)
-            .ok_or(SolanaMafiaError::MathOverflow)?
-    } else {
-        deposit_amount
-    };
+    // 🔧 ИСПРАВЛЕНО: slot_cost - невозвратный донат, НЕ входит в стоимость бизнеса
+    let business_value = deposit_amount; // Только депозит, БЕЗ slot_cost
     
     let business = Business::new(
         business_enum,
-        business_value, // Для слотов 3-5 включает slot_cost
+        business_value, // Только депозит - возвратная часть
         clock.unix_timestamp,
     );
 
@@ -151,9 +145,9 @@ pub fn create_business(
     // Place business in slot
     player.place_business_in_slot(slot_index as usize, business)?;
 
-    // 🚨 ИСПРАВЛЕНО: Учитываем полную стоимость бизнеса (с slot_cost для слотов 3-5)
+    // 🔧 ИСПРАВЛЕНО: Учитываем только депозит (slot_cost = невозвратный донат)
     player.total_invested = player.total_invested
-        .checked_add(business_value)
+        .checked_add(deposit_amount)
         .ok_or(SolanaMafiaError::MathOverflow)?;
 
     // Update game state
@@ -171,7 +165,7 @@ pub fn create_business(
         slot_index,
         business_type,
         level: 0, // Базовая функция создает level 0
-        base_cost: business_value, // Полная стоимость бизнеса (включает slot_cost для слотов 3-5)
+        base_cost: deposit_amount, // Только депозит (возвратная часть)
         slot_cost: actual_slot_cost,
         total_paid: total_payment,
         daily_rate,
@@ -231,6 +225,11 @@ pub fn upgrade_business(
 
     // 🚨 ИСПРАВЛЕНО: Используем u64 напрямую без конвертации
     player.total_upgrade_spent = player.total_upgrade_spent
+        .checked_add(upgrade_cost)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
+
+    // 🔧 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Увеличиваем total_invested при апгрейде
+    player.total_invested = player.total_invested
         .checked_add(upgrade_cost)
         .ok_or(SolanaMafiaError::MathOverflow)?;
 
@@ -302,6 +301,11 @@ pub fn sell_business(
     // (System Program can't transfer from accounts with data, so we do it manually)
     **ctx.accounts.treasury_pda.to_account_info().try_borrow_mut_lamports()? -= return_amount;
     **ctx.accounts.player_owner.to_account_info().try_borrow_mut_lamports()? += return_amount;
+
+    // 🔧 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Уменьшаем total_invested при продаже
+    player.total_invested = player.total_invested
+        .checked_sub(total_invested)
+        .ok_or(SolanaMafiaError::MathOverflow)?;
 
     // Update statistics
     game_state.add_withdrawal(return_amount);
@@ -422,12 +426,8 @@ pub fn create_business_with_level(
 
     // 🏪 Проверяем стоимость слота
     let slot_cost = slot.get_slot_cost(deposit_amount);
-    let business_value = if slot_index >= 3 && slot_index <= 5 && slot_cost > 0 {
-        deposit_amount.checked_add(slot_cost)
-            .ok_or(SolanaMafiaError::MathOverflow)?
-    } else {
-        deposit_amount
-    };
+    // 🔧 ИСПРАВЛЕНО: slot_cost - невозвратный донат, НЕ входит в стоимость бизнеса
+    let business_value = deposit_amount; // Только депозит, БЕЗ slot_cost
 
     // Распределение платежей
     let team_fee = deposit_amount
@@ -483,9 +483,9 @@ pub fn create_business_with_level(
     let actual_slot_cost = player.pay_slot_if_needed(slot_index as usize, deposit_amount)?;
     player.place_business_in_slot(slot_index as usize, business)?;
 
-    // Обновить статистику игрока
+    // 🔧 ИСПРАВЛЕНО: Учитываем только депозит (slot_cost = невозвратный донат)
     player.total_invested = player.total_invested
-        .checked_add(business_value)
+        .checked_add(deposit_amount)
         .ok_or(SolanaMafiaError::MathOverflow)?;
 
     // Обновить игровую статистику
@@ -503,7 +503,7 @@ pub fn create_business_with_level(
         slot_index,
         business_type,
         level: business.upgrade_level, // 🆕 ИСПРАВЛЕНИЕ: передаем реальный уровень!
-        base_cost: business_value,
+        base_cost: deposit_amount, // Только депозит (возвратная часть)
         slot_cost: actual_slot_cost,
         total_paid: deposit_amount.checked_add(slot_cost).unwrap_or(deposit_amount),
         daily_rate: business.daily_rate, // Уже включает апгрейды

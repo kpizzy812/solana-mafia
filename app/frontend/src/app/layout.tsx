@@ -19,8 +19,11 @@ export const metadata: Metadata = {
   title: "Solana Mafia - Business Empire Game",
   description: "Build your business empire on Solana blockchain",
   icons: {
-    icon: '/icons/logo.png',
-    shortcut: '/icons/logo.png',
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
+      { url: '/icons/logo.png', sizes: '1024x1024', type: 'image/png' }
+    ],
+    shortcut: '/favicon.ico',
     apple: '/icons/logo.png',
   },
 };

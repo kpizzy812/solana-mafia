@@ -19,12 +19,22 @@ RUN echo "=== DEBUG: PWD before copy ===" && pwd
 # Copy application code
 COPY . .
 
-# Debug: Check what was copied
-RUN echo "=== DEBUG: Files in /app ===" && ls -la
-RUN echo "=== DEBUG: Files in /app/src ===" && ls -la src/ || echo "src/ not found"
-RUN echo "=== DEBUG: All files recursively ===" && find . -name "lib" -type d
-RUN echo "=== DEBUG: Any lib files ===" && find . -name "*.ts" | grep lib || echo "No lib .ts files found"
-RUN echo "=== DEBUG: Files in /app/src/lib ===" && ls -la src/lib/ || echo "src/lib/ not found"
+# Build args for Next.js environment variables
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_WS_URL
+ARG NEXT_PUBLIC_SOLANA_NETWORK
+ARG NEXT_PUBLIC_SOLANA_RPC_URL
+ARG NEXT_PUBLIC_PROGRAM_ID_DEVNET
+
+# Set environment variables for build
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_SOLANA_NETWORK=$NEXT_PUBLIC_SOLANA_NETWORK
+ENV NEXT_PUBLIC_SOLANA_RPC_URL=$NEXT_PUBLIC_SOLANA_RPC_URL
+ENV NEXT_PUBLIC_PROGRAM_ID_DEVNET=$NEXT_PUBLIC_PROGRAM_ID_DEVNET
+
+# Debug: Show environment variables
+RUN echo "=== DEBUG: Build environment ===" && env | grep NEXT_PUBLIC
 
 # Build the application
 RUN npm run build
@@ -44,6 +54,13 @@ RUN adduser -S nextjs -u 1001
 
 # Install curl for healthcheck
 RUN apk add --no-cache curl
+
+# Runtime args for Next.js environment variables
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_WS_URL
+ARG NEXT_PUBLIC_SOLANA_NETWORK
+ARG NEXT_PUBLIC_SOLANA_RPC_URL
+ARG NEXT_PUBLIC_PROGRAM_ID_DEVNET
 
 # Copy built application
 COPY --from=builder /app/next.config.* ./
@@ -67,6 +84,13 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+
+# Set runtime environment variables for Next.js
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_SOLANA_NETWORK=$NEXT_PUBLIC_SOLANA_NETWORK
+ENV NEXT_PUBLIC_SOLANA_RPC_URL=$NEXT_PUBLIC_SOLANA_RPC_URL
+ENV NEXT_PUBLIC_PROGRAM_ID_DEVNET=$NEXT_PUBLIC_PROGRAM_ID_DEVNET
 
 # Start the application
 CMD ["node", "server.js"]

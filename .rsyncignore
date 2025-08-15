@@ -5,6 +5,7 @@
 # Build artifacts and dependencies
 node_modules/
 target/
+programs/
 app/frontend/.next/
 app/frontend/out/
 app/frontend/build/
@@ -20,8 +21,12 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Python virtual environment libs (NOT frontend src/lib!)
 lib64/
+*/lib/python*/
+env/lib/
+venv/lib/
+.venv/lib/
 parts/
 sdist/
 var/
@@ -33,6 +38,7 @@ wheels/
 # Environment files (will be handled separately)
 .env
 .env.local
+.env.local.backup
 .env.development.local
 .env.test.local
 .env.production.local
@@ -135,7 +141,6 @@ batch_test_transactions.py
 # Development helpers
 *.md.backup
 force_*.py
-simple_*.py
 parse_*.py
 *.sh.backup
 

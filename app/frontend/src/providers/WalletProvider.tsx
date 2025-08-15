@@ -25,10 +25,26 @@ interface WalletProviderProps {
 
 // Inner component to track wallet events
 const WalletEventTracker: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { connected, publicKey, wallet } = useWallet();
+  const { connected, publicKey, wallet, connecting, disconnecting, select } = useWallet();
+
+  useEffect(() => {
+    console.log('🔍 WALLET STATE CHANGE:', {
+      connected,
+      connecting,
+      disconnecting,
+      publicKey: publicKey?.toString(),
+      walletName: wallet?.adapter.name,
+      timestamp: new Date().toISOString()
+    });
+  }, [connected, connecting, disconnecting, publicKey, wallet]);
 
   useEffect(() => {
     if (connected && publicKey && wallet) {
+      console.log('✅ WALLET CONNECTED SUCCESSFULLY:', {
+        name: wallet.adapter.name,
+        publicKey: publicKey.toString(),
+        timestamp: new Date().toISOString()
+      });
       toast.success(`Connected to ${wallet.adapter.name}`, {
         duration: 2000,
       });
@@ -36,10 +52,20 @@ const WalletEventTracker: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [connected, publicKey, wallet]);
 
   useEffect(() => {
+    if (connecting) {
+      console.log('🔄 WALLET CONNECTING...', {
+        walletName: wallet?.adapter.name,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [connecting, wallet]);
+
+  useEffect(() => {
     if (!connected && !publicKey) {
       // Only show disconnect message if wallet was previously connected
       const wasConnected = localStorage.getItem('walletWasConnected');
       if (wasConnected === 'true') {
+        console.log('🔌 WALLET DISCONNECTED');
         toast('Wallet disconnected', {
           duration: 2000,
         });
@@ -57,8 +83,27 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   // The network can be set to 'devnet', 'testnet', or 'mainnet-beta'.
   const network = WalletAdapterNetwork.Devnet;
 
-  // You can also provide a custom RPC endpoint.
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  // Use custom RPC endpoint from environment variables
+  const endpoint = useMemo(() => {
+    const customEndpoint = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
+    const fallback = clusterApiUrl(network);
+    
+    console.log('🔗 RPC ENDPOINT DEBUG:', {
+      customEndpoint,
+      network,
+      fallback,
+      willUse: customEndpoint || fallback,
+      env: {
+        NEXT_PUBLIC_SOLANA_RPC_URL: process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
+        NODE_ENV: process.env.NODE_ENV
+      }
+    });
+    
+    const finalEndpoint = customEndpoint || fallback;
+    console.log('🎯 FINAL RPC ENDPOINT:', finalEndpoint);
+    
+    return finalEndpoint;
+  }, [network]);
 
   const wallets = useMemo(
     () => [
